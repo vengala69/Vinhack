@@ -35,25 +35,25 @@
 <h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight mb-2">
           Study<span class="text-primary">Sync</span>
 </h1>
-<p class="font-body-md text-body-md text-on-surface-variant max-w-md mx-auto leading-relaxed">Bio-rhythmic productivity, neuro-academic sync, and circadian alignment for VIT Vellore.</p>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-md mx-auto leading-relaxed">Sleep, screen time, coursework and focus sessions, scored into one daily picture. Local build &mdash; pick a profile below to open its data.</p>
 </header>
 <!-- Glassmorphic Login Card -->
 <section class="w-full bg-surface-container-low/85 backdrop-blur-xl rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col"><div id="loginToast" class="hidden mb-4 p-3 rounded-xl bg-primary-container/20 border-2 border-primary/40 text-primary flex items-center justify-between transition-all duration-300 shadow-lg"><div class="flex items-center gap-2"><span class="material-symbols-outlined text-base animate-pulse">verified</span><span class="font-label-sm text-label-sm font-semibold" id="toastMessage">Authenticating credentials...</span></div><span class="font-label-sm text-xs text-on-surface-variant font-mono">VIT-AUTH-OK</span></div>
-<!-- Stanford SSO / SUNet ID Passkey CTA -->
+
 
 <!-- Divider with Label -->
 
 <!-- Form Elements -->
-<form class="space-y-4" id="loginForm" onsubmit="event.preventDefault(); const t=document.getElementById('loginToast'); if(t){t.classList.remove('hidden');} const b=document.getElementById('submitBtn'); const l=document.getElementById('btnLabel'); const a=document.getElementById('btnArrow'); const s=document.getElementById('btnSpinner'); if(l) l.textContent='Authenticating...'; if(a) a.classList.add('hidden'); if(s) s.classList.remove('hidden'); if(b) b.disabled=true; setTimeout(()=&gt;{ if(l) l.textContent='Access Granted • Launching...'; setTimeout(()=&gt;{ window.location.href='index.html'; }, 600); }, 800);">
-<!-- SUNet ID / Stanford Email -->
+<form class="space-y-4" id="loginForm">
+<!-- Which profile to open -->
 <div class="flex flex-col space-y-1.5">
 <div class="flex justify-between items-center">
-<label class="font-label-md text-label-md text-on-surface" for="sunetIdInput">VIT Registration No. / Email</label>
+<label class="font-label-md text-label-md text-on-surface" for="loginEmailInput">VIT Registration No. / Email</label>
 <span class="font-label-sm text-label-sm text-secondary">Campus Active</span>
 </div>
 <div class="relative">
 <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg pointer-events-none">alternate_email</span>
-<input class="w-full bg-surface-container-lowest text-on-surface pl-10 pr-4 py-3 rounded-xl font-body-md text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-high transition-colors shadow-inner" id="sunetIdInput" placeholder="registration@vitstudent.ac.in" required="" type="email" value="arivera@vitstudent.ac.in">
+<input class="w-full bg-surface-container-lowest text-on-surface pl-10 pr-4 py-3 rounded-xl font-body-md text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-high transition-colors shadow-inner" id="loginEmailInput" list="vh-student-emails" placeholder="you@example.edu" required="" type="email">
 </div>
 </div>
 <!-- Password Field with Show/Hide Toggle -->
@@ -64,7 +64,7 @@
 </div>
 <div class="relative">
 <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg pointer-events-none">lock</span>
-<input class="w-full bg-surface-container-lowest text-on-surface pl-10 pr-11 py-3 rounded-xl font-body-md text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-high transition-colors shadow-inner" id="passwordInput" placeholder="••••••••••••" required="" type="password" value="CardinalPulse2025!">
+<input class="w-full bg-surface-container-lowest text-on-surface pl-10 pr-11 py-3 rounded-xl font-body-md text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-high transition-colors shadow-inner" id="passwordInput" placeholder="not checked in this build" type="password">
 <button aria-label="Toggle password visibility" class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface p-1 focus:outline-none transition-colors" id="togglePasswordBtn" onclick="togglePasswordVisibility()" type="button">
 <span class="material-symbols-outlined text-lg" id="eyeIcon">visibility</span>
 </button>
@@ -91,129 +91,70 @@
 <div class="hidden animate-spin h-5 w-5 rounded-full border-2 border-surface border-t-transparent" id="btnSpinner"></div>
 </button>
 </form>
-<!-- Quick Switch Demo Profile Section -->
-<div class="mt-6 pt-5 bg-surface-container/60 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-inner">
-<div class="flex items-center gap-2.5">
-<div class="w-8 h-8 rounded-full bg-primary-container/20 flex items-center justify-center text-primary font-label-md text-label-md font-bold">
-              AR
-            </div>
-<div class="flex flex-col text-left">
-<span class="font-label-md text-label-md font-medium text-on-surface">Alex Rivera</span>
-<span class="font-label-sm text-label-sm text-on-surface-variant">CS Undergrad • SCOPE (SJT)</span>
+<!-- Profiles, loaded from GET /api/students -->
+<div class="mt-6 pt-5 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wide text-on-surface-variant">Profiles in this database</span>
+<span class="font-label-sm text-label-sm text-outline" id="vh-profile-count"></span>
 </div>
+<div class="flex flex-col gap-2" id="vh-profiles">
+<div class="px-3 py-2.5 rounded-xl bg-surface-container/60 font-label-sm text-label-sm text-on-surface-variant">Loading profiles&hellip;</div>
 </div>
-<button class="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-secondary font-label-sm text-label-sm font-semibold transition-colors flex items-center justify-center gap-1" onclick="const e=document.getElementById('sunetIdInput'); const p=document.getElementById('passwordInput'); if(e) e.value='arivera@vitstudent.ac.in'; if(p) p.value='VITBioSync2025!'; const t=document.getElementById('loginToast'); const tm=document.getElementById('toastMessage'); if(tm) tm.textContent='Autologin profile verified for Alex Rivera (SCOPE)'; if(t) t.classList.remove('hidden'); const f=document.getElementById('loginForm'); if(f) f.dispatchEvent(new Event('submit', {cancelable: true}));" type="button">
-<span class="material-symbols-outlined text-sm">bolt</span>
-<span class="">1-Click Autologin</span>
-</button>
+<datalist id="vh-student-emails"></datalist>
 </div>
-<!-- Campus Bio-Metric Readiness Capsule -->
+<!-- Database status, from GET /api/health -->
 <div class="mt-4 p-3 rounded-xl bg-surface-container-lowest flex items-center justify-between">
 <div class="flex items-center gap-2.5">
-<span class="material-symbols-outlined text-primary text-lg">save_as</span>
+<span class="material-symbols-outlined text-primary text-lg" id="vh-db-icon">database</span>
 <div class="flex flex-col">
-<span class="font-label-sm text-label-sm font-medium text-on-surface">VIT Vellore Circadian Schedule</span>
-<span class="font-label-sm text-label-sm text-outline">Optimum Focus Phase (Alpha-3 Window)</span>
+<span class="font-label-sm text-label-sm font-medium text-on-surface" id="vh-db-title">Checking the local database&hellip;</span>
+<span class="font-label-sm text-label-sm text-outline" id="vh-db-path">&nbsp;</span>
 </div>
 </div>
 <div class="text-right">
-<span class="font-label-md text-label-md font-bold text-primary">94% Fit</span>
+<span class="font-label-md text-label-md font-bold text-primary" id="vh-db-latency"></span>
 </div>
 </div>
 </section>
-<!-- Live System Telemetry Ticker Dock -->
+<!-- Local build status -->
 <footer class="w-full mt-6 px-3 py-2.5 rounded-full bg-surface-container-low/70 backdrop-blur-md shadow-lg flex items-center justify-between overflow-x-auto text-on-surface-variant font-label-sm text-label-sm gap-4">
 <div class="flex items-center gap-1.5 flex-shrink-0">
-<span class="h-2 w-2 rounded-full bg-primary animate-pulse"></span>
-<span class="text-on-surface">Sync Engine:</span>
-<span class="text-primary font-medium">Online</span>
+<span class="h-2 w-2 rounded-full bg-primary animate-pulse" id="vh-api-dot"></span>
+<span class="text-on-surface">API:</span>
+<span class="text-primary font-medium" id="vh-api-state">checking&hellip;</span>
 </div>
 <div class="h-3 w-px bg-surface-variant flex-shrink-0"></div>
 <div class="flex items-center gap-1.5 flex-shrink-0">
 <span class="material-symbols-outlined text-xs text-secondary">speed</span>
-<span class="">Neural Latency:</span>
-<span class="text-on-surface font-medium">12ms</span>
+<span class="">Round trip:</span>
+<span class="text-on-surface font-medium" id="vh-api-latency">&ndash;</span>
 </div>
 <div class="h-3 w-px bg-surface-variant flex-shrink-0"></div>
 <div class="flex items-center gap-1.5 flex-shrink-0">
-<span class="material-symbols-outlined text-xs text-primary">school</span>
-<span class="">Canvas LMS:</span>
-<span class="text-primary font-medium">Synced</span>
+<span class="material-symbols-outlined text-xs text-primary">group</span>
+<span class="">Students:</span>
+<span class="text-primary font-medium" id="vh-api-students">&ndash;</span>
 </div>
 <div class="h-3 w-px bg-surface-variant flex-shrink-0"></div>
 <div class="flex items-center gap-1.5 flex-shrink-0">
-<span class="material-symbols-outlined text-xs text-secondary-fixed">favorite</span>
-<span class="">Apple HealthKit:</span>
-<span class="text-secondary-fixed font-medium">Connected</span>
+<span class="material-symbols-outlined text-xs text-secondary-fixed">lan</span>
+<span class="">Mode:</span>
+<span class="text-secondary-fixed font-medium">Local only</span>
 </div>
 </footer>
-<!-- Stanford University Confidentiality Footer -->
+<!-- Footer -->
 <div class="mt-5 text-center text-outline font-label-sm text-label-sm flex items-center justify-center gap-2"><span class="">VIT Vellore Neuro-Cognitive Sciences Lab</span><span class="">•</span><span class="">VIT Vellore IT Secure Gateway</span></div>
 </div>
 </div>
-<script>
-    function togglePasswordVisibility() {
-      const passwordInput = document.getElementById('passwordInput');
-      const eyeIcon = document.getElementById('eyeIcon');
-      if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        eyeIcon.textContent = 'visibility_off';
-      } else {
-        passwordInput.type = 'password';
-        eyeIcon.textContent = 'visibility';
-      }
-    }
 
-    function quickFillDemo(email) {
-      const emailInput = document.getElementById('sunetIdInput');
-      const passwordInput = document.getElementById('passwordInput');
-      emailInput.value = email;
-      passwordInput.value = 'StanfordBioSync2025!';
-      
-      // Visual feedback ripple on primary button
-      const submitBtn = document.getElementById('submitBtn');
-      submitBtn.classList.add('scale-105');
-      setTimeout(() => submitBtn.classList.remove('scale-105'), 200);
-      
-      // Auto-trigger portal launch
-      handleLoginSubmit(new Event('submit'));
-    }
-
-    function handleLoginSubmit(event) {
-      if (event && event.preventDefault) event.preventDefault();
-      
-      const submitBtn = document.getElementById('submitBtn');
-      const btnLabel = document.getElementById('btnLabel');
-      const btnArrow = document.getElementById('btnArrow');
-      const btnSpinner = document.getElementById('btnSpinner');
-
-      btnLabel.textContent = 'Synchronizing Biological Graph...';
-      btnArrow.classList.add('hidden');
-      btnSpinner.classList.remove('hidden');
-      submitBtn.disabled = true;
-
-      setTimeout(() => {
-        btnLabel.textContent = 'Stanford Neural Passkey Granted';
-        btnSpinner.classList.add('hidden');
-        submitBtn.classList.remove('from-primary-container', 'via-primary', 'to-secondary-container');
-        submitBtn.classList.add('bg-primary-container');
-
-        // Optional smooth transition effect
-        setTimeout(() => {
-          btnLabel.textContent = 'Redirecting to Dashboard...';
-        }, 600);
-      }, 950);
-    }
-
-    // Stanford SSO passkey click handler
-    document.getElementById('ssoButton').addEventListener('click', () => {
-      handleLoginSubmit(new Event('submit'));
-    });
-  </script>
 </div></main>
 
 
 
 
 
+<script src="assets/prefs.js"></script>
+<script src="assets/api.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/page-login.js"></script>
 </body></html>

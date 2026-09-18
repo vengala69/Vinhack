@@ -6,13 +6,16 @@ Interactive docs live at http://127.0.0.1:8000/docs - the fastest way to see
 every endpoint and try it without writing a line of frontend code.
 """
 import sqlite3
+from datetime import date, timedelta
 from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from . import models as m
-from .db import DB_PATH, connect, get_conn, insert, one, rows, run_script, schema_exists, update
+from .db import (DB_PATH, ROOT, connect, get_conn, insert, one, rows, run_script,
+                 schema_exists, update)
 
 app = FastAPI(
     title="VinHack API",
@@ -33,11 +36,17 @@ app.add_middleware(
 
 @app.on_event("startup")
 def ensure_schema() -> None:
-    """Create the schema on first run so the API never starts against an empty file."""
+    """Bring the database up to the current schema before serving a request.
+
+    Every CREATE in schema.sql is IF NOT EXISTS, so running it unconditionally
+    creates the file on first boot *and* adds anything a newer schema
+    introduced to a database that already exists - no migration step to forget.
+    """
     conn = connect()
     try:
-        if not schema_exists(conn):
-            run_script(conn, "schema.sql")
+        fresh = not schema_exists(conn)
+        run_script(conn, "schema.sql")
+        if fresh:
             print(f"created schema in {DB_PATH}")
     finally:
         conn.close()
@@ -67,6 +76,18 @@ def found(row: Optional[dict], what: str, ident: Any) -> dict:
     if row is None:
         raise HTTPException(404, f"{what} {ident} not found")
     return row
+
+
+def refresh(conn: sqlite3.Connection, result: Any = None) -> Any:
+    """Rebuild daily_metrics, then hand back whatever was just written.
+
+    daily_metrics is derived, so every write to a raw table leaves it stale and
+    the dashboard goes on showing yesterday's numbers. One student-year is a
+    few hundred rows, so rebuilding inline is cheaper than explaining to the
+    frontend when it needs to call /api/rollup itself.
+    """
+    run_script(conn, "rollup.sql")
+    return result
 
 
 # ---------------------------------------------------------------------
@@ -145,7 +166,8 @@ def log_sleep(student_id: int, body: m.SleepLogIn, conn=Depends(get_conn)):
     require_student(conn, student_id)
     conn.execute("DELETE FROM sleep_logs WHERE student_id = ? AND sleep_date = ?",
                  (student_id, body.sleep_date))
-    return insert(conn, "sleep_logs", {"student_id": student_id, **body.model_dump()}, "sleep_id")
+    return refresh(conn, insert(
+        conn, "sleep_logs", {"student_id": student_id, **body.model_dump()}, "sleep_id"))
 
 
 @app.get("/api/students/{student_id}/screen-time", tags=["screen time"])
@@ -159,7 +181,8 @@ def log_screen_time(student_id: int, body: m.ScreenTimeIn, conn=Depends(get_conn
     require_student(conn, student_id)
     conn.execute("DELETE FROM screen_time WHERE student_id = ? AND date = ?",
                  (student_id, body.date))
-    return insert(conn, "screen_time", {"student_id": student_id, **body.model_dump()}, "screen_id")
+    return refresh(conn, insert(
+        conn, "screen_time", {"student_id": student_id, **body.model_dump()}, "screen_id"))
 
 
 @app.get("/api/students/{student_id}/mood", tags=["mood & energy"])
@@ -173,7 +196,8 @@ def log_mood(student_id: int, body: m.MoodEnergyIn, conn=Depends(get_conn)):
     require_student(conn, student_id)
     conn.execute("DELETE FROM mood_energy WHERE student_id = ? AND date = ?",
                  (student_id, body.date))
-    return insert(conn, "mood_energy", {"student_id": student_id, **body.model_dump()}, "mood_id")
+    return refresh(conn, insert(
+        conn, "mood_energy", {"student_id": student_id, **body.model_dump()}, "mood_id"))
 
 
 # ---------------------------------------------------------------------
@@ -201,7 +225,8 @@ def list_tasks(student_id: int, status: Optional[m.Status] = None,
 @app.post("/api/students/{student_id}/tasks", status_code=201, tags=["tasks"])
 def create_task(student_id: int, body: m.TaskIn, conn=Depends(get_conn)):
     require_student(conn, student_id)
-    return insert(conn, "academic_tasks", {"student_id": student_id, **body.model_dump()}, "task_id")
+    return refresh(conn, insert(
+        conn, "academic_tasks", {"student_id": student_id, **body.model_dump()}, "task_id"))
 
 
 @app.get("/api/tasks/{task_id}", tags=["tasks"])
@@ -215,7 +240,8 @@ def update_task(task_id: int, body: m.TaskUpdate, conn=Depends(get_conn)):
     """Patch a task. Setting status to 'completed' stamps completed_at
     automatically; moving it back off 'completed' clears it."""
     get_task(task_id, conn)
-    return update(conn, "academic_tasks", body.model_dump(exclude_unset=True), "task_id", task_id)
+    return refresh(conn, update(
+        conn, "academic_tasks", body.model_dump(exclude_unset=True), "task_id", task_id))
 
 
 @app.delete("/api/tasks/{task_id}", status_code=204, tags=["tasks"])
@@ -224,6 +250,7 @@ def delete_task(task_id: int, conn=Depends(get_conn)):
     get_task(task_id, conn)
     conn.execute("DELETE FROM academic_tasks WHERE task_id = ?", (task_id,))
     conn.commit()
+    refresh(conn)
 
 
 # ---------------------------------------------------------------------
@@ -248,7 +275,8 @@ def create_event(student_id: int, body: m.EventIn, conn=Depends(get_conn)):
     require_student(conn, student_id)
     data = body.model_dump()
     data["is_fixed"] = int(data["is_fixed"])
-    return insert(conn, "calendar_events", {"student_id": student_id, **data}, "event_id")
+    return refresh(conn, insert(
+        conn, "calendar_events", {"student_id": student_id, **data}, "event_id"))
 
 
 @app.patch("/api/events/{event_id}", tags=["calendar"])
@@ -258,7 +286,7 @@ def update_event(event_id: int, body: m.EventUpdate, conn=Depends(get_conn)):
     data = body.model_dump(exclude_unset=True)
     if "is_fixed" in data:
         data["is_fixed"] = int(data["is_fixed"])
-    return update(conn, "calendar_events", data, "event_id", event_id)
+    return refresh(conn, update(conn, "calendar_events", data, "event_id", event_id))
 
 
 @app.delete("/api/events/{event_id}", status_code=204, tags=["calendar"])
@@ -267,6 +295,7 @@ def delete_event(event_id: int, conn=Depends(get_conn)):
           "event", event_id)
     conn.execute("DELETE FROM calendar_events WHERE event_id = ?", (event_id,))
     conn.commit()
+    refresh(conn)
 
 
 # ---------------------------------------------------------------------
@@ -284,7 +313,8 @@ def start_session(student_id: int, body: m.SessionIn, conn=Depends(get_conn)):
     """Log a study session. Post it without end_time to open a running timer,
     then PATCH the end_time when the student stops; duration fills itself in."""
     require_student(conn, student_id)
-    return insert(conn, "study_sessions", {"student_id": student_id, **body.model_dump()}, "session_id")
+    return refresh(conn, insert(
+        conn, "study_sessions", {"student_id": student_id, **body.model_dump()}, "session_id"))
 
 
 @app.patch("/api/sessions/{session_id}", tags=["study"])
@@ -299,7 +329,7 @@ def update_session(session_id: int, body: m.SessionUpdate, conn=Depends(get_conn
         result = update(conn, "study_sessions", {"duration_minutes": round(
             (_julian(conn, result["end_time"]) - _julian(conn, result["start_time"])) * 1440)},
             "session_id", session_id)
-    return result
+    return refresh(conn, result)
 
 
 def _julian(conn: sqlite3.Connection, ts: str) -> float:
@@ -312,6 +342,7 @@ def delete_session(session_id: int, conn=Depends(get_conn)):
           "session", session_id)
     conn.execute("DELETE FROM study_sessions WHERE session_id = ?", (session_id,))
     conn.commit()
+    refresh(conn)
 
 
 # ---------------------------------------------------------------------
@@ -345,16 +376,16 @@ def dashboard(student_id: int, days: int = 14, conn=Depends(get_conn)):
         "student": one(conn.execute(
             "SELECT * FROM students WHERE student_id = ?", (student_id,))),
         "today": one(conn.execute(
-            "SELECT * FROM daily_metrics WHERE student_id = ? AND date = date('now')",
+            "SELECT * FROM daily_metrics WHERE student_id = ? AND date = date('now', 'localtime')",
             (student_id,))),
         "trend": rows(conn.execute(
             "SELECT * FROM daily_metrics WHERE student_id = ? "
-            "AND date >= date('now', ?) ORDER BY date", (student_id, f"-{days} days"))),
+            "AND date >= date('now', 'localtime', ?) ORDER BY date", (student_id, f"-{days} days"))),
         "open_tasks": rows(conn.execute(
             "SELECT * FROM v_open_tasks WHERE student_id = ? "
             "ORDER BY due_date IS NULL, due_date LIMIT 10", (student_id,))),
         "upcoming_events": rows(conn.execute(
-            "SELECT * FROM calendar_events WHERE student_id = ? AND start_time >= datetime('now') "
+            "SELECT * FROM calendar_events WHERE student_id = ? AND start_time >= datetime('now', 'localtime') "
             "ORDER BY start_time LIMIT 10", (student_id,))),
         "averages": one(conn.execute(
             "SELECT round(avg(sleep_duration), 1) AS avg_sleep_minutes, "
@@ -362,6 +393,299 @@ def dashboard(student_id: int, days: int = 14, conn=Depends(get_conn)):
             "       round(avg(study_hours_completed), 2) AS avg_study_hours, "
             "       round(avg(productivity_score), 1) AS avg_productivity, "
             "       round(avg(energy_score), 1) AS avg_energy "
-            "FROM daily_metrics WHERE student_id = ? AND date >= date('now', ?)",
+            "FROM daily_metrics WHERE student_id = ? AND date >= date('now', 'localtime', ?)",
             (student_id, f"-{days} days"))),
     }
+
+
+# ---------------------------------------------------------------------
+# Assessments (graded work)
+#
+# academic_tasks tracks what is due; this tracks what came back with a mark
+# on it. Kept separate because they have different lifetimes - a task gets
+# deleted once it stops mattering, a grade stays part of the record.
+# ---------------------------------------------------------------------
+
+@app.get("/api/students/{student_id}/assessments", tags=["grades"])
+def list_assessments(student_id: int, subject: Optional[str] = None,
+                     frm: Optional[str] = Query(None, alias="from"),
+                     to: Optional[str] = None, limit: int = 200,
+                     conn=Depends(get_conn)):
+    """Graded items, newest first, read through v_assessment_pct so every row
+    already carries its percentage and how far above the class it sat."""
+    require_student(conn, student_id)
+    clauses, params = ["student_id = ?"], [student_id]
+    if subject:
+        clauses.append("subject = ?"); params.append(subject)
+    if frm:
+        clauses.append("assessed_on >= ?"); params.append(frm)
+    if to:
+        clauses.append("assessed_on <= ?"); params.append(to)
+    params.append(limit)
+    return rows(conn.execute(
+        f"SELECT * FROM v_assessment_pct WHERE {' AND '.join(clauses)} "
+        f"ORDER BY assessed_on DESC, assessment_id DESC LIMIT ?", params))
+
+
+@app.post("/api/students/{student_id}/assessments", status_code=201, tags=["grades"])
+def create_assessment(student_id: int, body: m.AssessmentIn, conn=Depends(get_conn)):
+    require_student(conn, student_id)
+    return insert(conn, "assessments",
+                  {"student_id": student_id, **body.model_dump()}, "assessment_id")
+
+
+@app.patch("/api/assessments/{assessment_id}", tags=["grades"])
+def update_assessment(assessment_id: int, body: m.AssessmentUpdate, conn=Depends(get_conn)):
+    found(one(conn.execute("SELECT * FROM assessments WHERE assessment_id = ?",
+                           (assessment_id,))), "assessment", assessment_id)
+    return update(conn, "assessments", body.model_dump(exclude_unset=True),
+                  "assessment_id", assessment_id)
+
+
+@app.delete("/api/assessments/{assessment_id}", status_code=204, tags=["grades"])
+def delete_assessment(assessment_id: int, conn=Depends(get_conn)):
+    found(one(conn.execute("SELECT * FROM assessments WHERE assessment_id = ?",
+                           (assessment_id,))), "assessment", assessment_id)
+    conn.execute("DELETE FROM assessments WHERE assessment_id = ?", (assessment_id,))
+    conn.commit()
+
+
+@app.get("/api/students/{student_id}/grades", tags=["grades"])
+def grades(student_id: int, conn=Depends(get_conn)):
+    """A card's worth of standing per subject, plus the category rollup the
+    grade screen breaks scores down by."""
+    require_student(conn, student_id)
+    return {
+        "subjects": rows(conn.execute(
+            "SELECT * FROM v_subject_grades WHERE student_id = ? "
+            "ORDER BY weighted_percent DESC", (student_id,))),
+        "by_category": rows(conn.execute(
+            "SELECT category, COUNT(*) AS items, ROUND(AVG(percent), 2) AS mean_percent, "
+            "       ROUND(SUM(COALESCE(weight_percent, 0)), 2) AS weight_recorded "
+            "FROM v_assessment_pct WHERE student_id = ? GROUP BY category "
+            "ORDER BY mean_percent DESC", (student_id,))),
+        "overall": one(conn.execute(
+            "SELECT COUNT(*) AS items, ROUND(AVG(percent), 2) AS mean_percent, "
+            "       ROUND(AVG(class_delta), 2) AS avg_class_delta "
+            "FROM v_assessment_pct WHERE student_id = ?", (student_id,))),
+    }
+
+
+# ---------------------------------------------------------------------
+# Derived insight
+#
+# Everything below is computed from rows the student logged. There is no
+# wearable behind this API, so what a sensor would have supplied - heart rate,
+# HRV, sleep stages - is absent by design rather than invented.
+# ---------------------------------------------------------------------
+
+SLEEP_BANDS = ("<5.5h", "5.5-6.5h", "6.5-7.5h", ">=7.5h", "unknown")
+
+
+def _band(hours: Optional[float]) -> str:
+    """The sleep bands the analytics screen plots productivity against."""
+    if hours is None:
+        return "unknown"
+    if hours < 5.5:
+        return "<5.5h"
+    if hours < 6.5:
+        return "5.5-6.5h"
+    if hours < 7.5:
+        return "6.5-7.5h"
+    return ">=7.5h"
+
+
+def _streak(day_list: list[str], today: str) -> int:
+    """Consecutive days ending today that carry a study session.
+
+    Yesterday still keeps the streak alive: it should not read as broken at
+    09:00 purely because the student has not sat down yet today.
+    """
+    have = set(day_list)
+    cursor = date.fromisoformat(today)
+    if cursor.isoformat() not in have:
+        cursor -= timedelta(days=1)
+    total = 0
+    while cursor.isoformat() in have:
+        total += 1
+        cursor -= timedelta(days=1)
+    return total
+
+
+def _pct(value: Optional[float], ceiling: float) -> Optional[float]:
+    """Scale a raw value onto 0-100, against the value that counts as full marks."""
+    if value is None:
+        return None
+    return round(max(0.0, min(100.0, value / ceiling * 100.0)), 1)
+
+
+def _blend(parts: list[tuple[Optional[float], float]]) -> Optional[float]:
+    """Weighted mean that drops, rather than zeroes, components with no data."""
+    live = [(v, w) for v, w in parts if v is not None]
+    if not live:
+        return None
+    return round(sum(v * w for v, w in live) / sum(w for _, w in live), 1)
+
+
+def _mean(values: list[float], places: int = 1) -> Optional[float]:
+    return round(sum(values) / len(values), places) if values else None
+
+
+@app.get("/api/students/{student_id}/insights", tags=["metrics"])
+def insights(student_id: int, days: int = 14, conn=Depends(get_conn)):
+    """The scores, streak and correlations the analytics screens are built on."""
+    require_student(conn, student_id)
+    window = f"-{days} days"
+    today, since = conn.execute(
+        "SELECT date('now', 'localtime'), date('now', 'localtime', ?)", (window,)).fetchone()
+
+    trend = rows(conn.execute(
+        "SELECT * FROM daily_metrics WHERE student_id = ? AND date >= ? "
+        "ORDER BY date", (student_id, since)))
+
+    averages = one(conn.execute(
+        "SELECT round(avg(sleep_duration), 1)       AS avg_sleep_minutes, "
+        "       round(avg(sleep_quality), 2)        AS avg_sleep_quality, "
+        "       round(avg(total_screen_minutes), 1) AS avg_screen_minutes, "
+        "       round(avg(social_media_minutes), 1) AS avg_social_minutes, "
+        "       round(avg(study_hours_completed),2) AS avg_study_hours, "
+        "       round(avg(available_study_hours),2) AS avg_available_hours, "
+        "       round(avg(productivity_score), 1)   AS avg_productivity, "
+        "       round(avg(energy_score), 1)         AS avg_energy, "
+        "       count(*)                            AS days_logged "
+        "FROM daily_metrics WHERE student_id = ? AND date >= ?",
+        (student_id, since))) or {}
+
+    mood = one(conn.execute(
+        "SELECT round(avg(mood_score), 1) AS avg_mood, count(*) AS days_logged "
+        "FROM mood_energy WHERE student_id = ? AND date >= ?",
+        (student_id, since))) or {}
+
+    focus = one(conn.execute(
+        "SELECT round(avg(focus_rating), 2) AS avg_focus, count(*) AS sessions, "
+        "       round(sum(duration_minutes) / 60.0, 2) AS hours "
+        "FROM study_sessions WHERE student_id = ? AND date(start_time) >= ?",
+        (student_id, since))) or {}
+
+    # Sleep against the productivity score the rollup already computes. This is
+    # the correlation the database can genuinely support - nothing here knows
+    # what a given night's sleep did to an exam mark.
+    buckets: dict[str, dict[str, Any]] = {}
+    for row in trend:
+        minutes = row["sleep_duration"]
+        key = _band(minutes / 60.0 if minutes else None)
+        bucket = buckets.setdefault(key, {"band": key, "days": 0, "prod": [], "study": []})
+        bucket["days"] += 1
+        if row["productivity_score"] is not None:
+            bucket["prod"].append(row["productivity_score"])
+        if row["study_hours_completed"] is not None:
+            bucket["study"].append(row["study_hours_completed"])
+    sleep_vs_productivity = [
+        {"band": b["band"], "days": b["days"],
+         "avg_productivity": _mean(b["prod"]),
+         "avg_study_hours": _mean(b["study"], 2)}
+        for b in (buckets[k] for k in SLEEP_BANDS if k in buckets)
+    ]
+
+    # When the student actually focuses well, by time of day.
+    focus_by_part = rows(conn.execute(
+        "SELECT CASE "
+        "         WHEN CAST(strftime('%H', start_time) AS INTEGER) < 6  THEN 'late night' "
+        "         WHEN CAST(strftime('%H', start_time) AS INTEGER) < 12 THEN 'morning' "
+        "         WHEN CAST(strftime('%H', start_time) AS INTEGER) < 18 THEN 'afternoon' "
+        "         WHEN CAST(strftime('%H', start_time) AS INTEGER) < 23 THEN 'evening' "
+        "         ELSE 'late night' END                  AS part_of_day, "
+        "       COUNT(*)                                 AS sessions, "
+        "       ROUND(AVG(focus_rating), 2)              AS avg_focus, "
+        "       ROUND(SUM(duration_minutes) / 60.0, 2)   AS hours "
+        "FROM study_sessions "
+        "WHERE student_id = ? AND duration_minutes IS NOT NULL AND date(start_time) >= ? "
+        "GROUP BY part_of_day ORDER BY avg_focus DESC", (student_id, since)))
+
+    # Where the hours went, by the subject of the task each session was against.
+    subject_effort = rows(conn.execute(
+        "SELECT COALESCE(t.subject, 'Unassigned')        AS subject, "
+        "       ROUND(SUM(s.duration_minutes) / 60.0, 2) AS hours, "
+        "       ROUND(AVG(s.focus_rating), 2)            AS avg_focus, "
+        "       COUNT(*)                                 AS sessions "
+        "FROM study_sessions s LEFT JOIN academic_tasks t ON t.task_id = s.task_id "
+        "WHERE s.student_id = ? AND s.duration_minutes IS NOT NULL AND date(s.start_time) >= ? "
+        "GROUP BY subject ORDER BY hours DESC", (student_id, since)))
+
+    session_days = [r["d"] for r in rows(conn.execute(
+        "SELECT DISTINCT date(start_time) AS d FROM study_sessions "
+        "WHERE student_id = ? ORDER BY d DESC LIMIT 400", (student_id,)))]
+
+    mastery = one(conn.execute(
+        "SELECT ROUND(AVG(weighted_percent), 1) AS pct "
+        "FROM v_subject_grades WHERE student_id = ?", (student_id,))) or {}
+
+    # Four sub-scores on one 0-100 axis, so rings and bars can be read together.
+    #
+    # "Nothing logged" has to stay distinguishable from "logged, and it was
+    # bad": a student who has just signed up is not at zero, they are unknown.
+    # So the study-days component only has a denominator once there is at least
+    # one day of data to divide by.
+    logged_days = averages.get("days_logged") or 0
+    days_with_study = (
+        _pct(len([d for d in session_days if d >= since]), max(1, min(days, logged_days)))
+        if logged_days else None
+    )
+    scores = {
+        "academic_mastery": mastery.get("pct"),
+        "sleep_health": _blend([
+            (_pct(averages.get("avg_sleep_minutes"), 480.0), 0.7),  # 8h is full marks
+            (_pct(averages.get("avg_sleep_quality"), 5.0), 0.3),
+        ]),
+        "resilience": _blend([
+            (_pct(averages.get("avg_energy"), 10.0), 0.6),
+            (_pct(mood.get("avg_mood"), 10.0), 0.4),
+        ]),
+        "focus_consistency": _blend([
+            (days_with_study, 0.5),
+            (_pct(focus.get("avg_focus"), 5.0), 0.5),
+        ]),
+        "productivity": averages.get("avg_productivity"),
+    }
+
+    sleep_debt = None
+    if averages.get("avg_sleep_minutes") is not None and averages.get("days_logged"):
+        sleep_debt = round(
+            (averages["avg_sleep_minutes"] - 480) / 60.0 * averages["days_logged"], 1)
+
+    return {
+        "window_days": days,
+        "today": today,
+        "since": since,
+        "averages": averages,
+        "mood": mood,
+        "focus": focus,
+        "scores": scores,
+        "synthesis_index": _blend([
+            (scores["academic_mastery"], 0.30),
+            (scores["sleep_health"], 0.25),
+            (scores["resilience"], 0.20),
+            (scores["focus_consistency"], 0.25),
+        ]),
+        "sleep_debt_hours": sleep_debt,
+        "streak_days": _streak(session_days, today),
+        "sleep_vs_productivity": sleep_vs_productivity,
+        "focus_by_part_of_day": focus_by_part,
+        "subject_effort": subject_effort,
+        "trend": trend,
+    }
+
+
+# ---------------------------------------------------------------------
+# The frontend
+#
+# Serving the pages from the API process is what keeps this a one-command app:
+# same origin, so CORS never comes into it, and no second server to start.
+# Mounted last, because a mount at "/" swallows every path that the API routes
+# above did not already claim.
+# ---------------------------------------------------------------------
+
+FRONTEND_DIR = ROOT / "frontend"
+
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

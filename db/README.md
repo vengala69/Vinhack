@@ -5,7 +5,7 @@ SQLite schema for the student wellness & productivity tracker.
 ```
 db/
 ├── setup.py        builds the database (this is the entry point)
-├── schema.sql      the 8 tables, constraints, indexes, triggers, views
+├── schema.sql      the 9 tables, constraints, indexes, triggers, views
 ├── rollup.sql      recomputes daily_metrics from the raw tables
 ├── seed_dev.sql    3 students × 14 days of generated history
 └── vinhack.db      the database itself (gitignored)
@@ -56,17 +56,27 @@ that skips this will silently ignore every cascade in the schema.
 | `calendar_events` | one row per event | `is_fixed` (0/1) marks immovable commitments |
 | `mood_energy` | student × day | both scores 1–10 |
 | `study_sessions` | one row per session | optional `task_id`; duration auto-derived |
+| `assessments` | one row per graded item | `score`/`max_score`; optional `weight_percent` and `class_average` |
 | `daily_metrics` | student × day | **derived** — rebuilt by `rollup.sql`, never written by hand |
 
 Everything cascades from `students`: deleting a student removes all their data.
-Deleting a task leaves its study sessions in place with `task_id` set to NULL,
-so logged effort is never lost.
+Deleting a task leaves its study sessions **and** its assessments in place with
+`task_id` set to NULL, so neither logged effort nor a recorded grade is lost.
+
+`academic_tasks` and `assessments` are deliberately separate. A task is
+something that is *due*, and gets deleted once it stops mattering; an assessment
+is something that came *back with a mark on it*, and is part of the record.
 
 ### Conventions
 
 - Timestamps are ISO-8601 text, `'YYYY-MM-DD HH:MM:SS'`; dates are `'YYYY-MM-DD'`.
   SQLite has no date type, but this format sorts correctly and works with
   `date()`, `datetime()`, `julianday()` and `strftime()`.
+- **Every stored time is local wall-clock, never UTC.** A 09:00 lecture reads
+  09:00 to the student who has to sit in it, and east of UTC `date('now')` is
+  still yesterday until mid-morning — which would leave the dashboard a day
+  behind every morning. Every clock reading in the schema, the rollup and the
+  API therefore carries `'localtime'`.
 - Enums are `TEXT` with a `CHECK` constraint listing the allowed values.
 - Booleans are `INTEGER` 0/1.
 
@@ -96,6 +106,8 @@ bottom of `rollup.sql`:
 - `v_open_tasks` — outstanding tasks with `hours_until_due` and `is_overdue`
 - `v_study_by_day` — study hours, average focus, session count per student per day
 - `v_committed_by_day` — hours locked up by fixed calendar events
+- `v_assessment_pct` — every graded item as a percentage, with `class_delta`
+- `v_subject_grades` — one weight-averaged standing per subject
 
 ## Status
 
@@ -103,8 +115,12 @@ Verified on Python 3.12 / SQLite 3.45. `py db/setup.py --reset --seed` builds
 clean, and the derived logic was checked both against the seed data and
 end-to-end through the API: triggers fill every duration, the generated column
 matches its inputs, `completed_at` tracks task status in both directions,
-deleting a student clears all seven child tables, and no `daily_metrics` column
+deleting a student clears all eight child tables, and no `daily_metrics` column
 comes out null.
+
+Every `CREATE` in `schema.sql` is `IF NOT EXISTS`, so the file is safe to
+re-run. The API runs it on startup, which means a database built by an earlier
+version picks up new tables without a migration step.
 
 The API in [`vinhack/`](../vinhack) is the intended way in; see the
 [root README](../README.md).

@@ -6,7 +6,7 @@ schema; the database's own CHECK constraints remain the last line of defence.
 
 Every field on an *Update model is optional: PATCH applies a partial change.
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, BeforeValidator, EmailStr, Field
@@ -21,8 +21,9 @@ from pydantic import BaseModel, BeforeValidator, EmailStr, Field
 #
 # A browser's Date.toISOString() emits '2026-09-18T14:00:00.000Z', so this is
 # the default thing a frontend sends. Normalise it here rather than asking
-# every caller to remember. Offset-aware input is converted to UTC, matching
-# SQLite's datetime('now'), which the schema uses for its own defaults.
+# every caller to remember. Offset-aware input is converted to LOCAL time,
+# because the schema stores local wall-clock throughout - see db/schema.sql.
+# Naive input is taken as already-local and passes through untouched.
 # ---------------------------------------------------------------------
 
 def _to_timestamp(v: Any) -> Any:
@@ -32,7 +33,7 @@ def _to_timestamp(v: Any) -> Any:
     if dt is None:
         return v  # let the database's own constraints reject it
     if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        dt = dt.astimezone().replace(tzinfo=None)
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -153,3 +154,32 @@ class SessionUpdate(BaseModel):
     end_time: Optional[Timestamp] = None
     duration_minutes: Optional[int] = Field(None, ge=0)
     focus_rating: Optional[int] = Score5
+
+
+AssessmentCategory = Literal["exam", "quiz", "lab", "project", "assignment",
+                             "participation", "other"]
+
+
+class AssessmentIn(BaseModel):
+    subject: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    category: AssessmentCategory = "other"
+    assessed_on: DateStr
+    score: float = Field(ge=0)
+    max_score: float = Field(100, gt=0)
+    # the share of the final subject grade this item carries, if known
+    weight_percent: Optional[float] = Field(None, ge=0, le=100)
+    class_average: Optional[float] = Field(None, ge=0)
+    task_id: Optional[int] = None
+
+
+class AssessmentUpdate(BaseModel):
+    subject: Optional[str] = Field(None, min_length=1)
+    title: Optional[str] = Field(None, min_length=1)
+    category: Optional[AssessmentCategory] = None
+    assessed_on: Optional[DateStr] = None
+    score: Optional[float] = Field(None, ge=0)
+    max_score: Optional[float] = Field(None, gt=0)
+    weight_percent: Optional[float] = Field(None, ge=0, le=100)
+    class_average: Optional[float] = Field(None, ge=0)
+    task_id: Optional[int] = None

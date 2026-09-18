@@ -18,7 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from vinhack.db import DB_PATH, connect, run_script, schema_exists  # noqa: E402
 
 TABLES = ("students", "sleep_logs", "screen_time", "academic_tasks",
-          "calendar_events", "mood_energy", "study_sessions", "daily_metrics")
+          "calendar_events", "mood_energy", "study_sessions", "assessments",
+          "daily_metrics")
 
 
 def main() -> int:

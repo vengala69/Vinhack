@@ -7,6 +7,7 @@
 
 PRAGMA foreign_keys = ON;
 
+DELETE FROM assessments;
 DELETE FROM daily_metrics;
 DELETE FROM study_sessions;
 DELETE FROM mood_energy;
@@ -28,16 +29,19 @@ CREATE TEMP TABLE seed_days AS
 WITH RECURSIVE d(n) AS (
     SELECT 0 UNION ALL SELECT n + 1 FROM d WHERE n < 13
 )
-SELECT date('now', '-' || (13 - n) || ' days') AS date FROM d;
+SELECT date('now', 'localtime', '-' || (13 - n) || ' days') AS date FROM d;
 
 -- ---------------------------------------------------------------------
--- sleep_logs: bed between 23:00 and 01:30, waking between 07:00 and 08:30.
+-- sleep_logs: bed between 22:30 and 02:00, waking between 06:15 and 08:30,
+-- which spans every band the analytics screen buckets sleep into.
 -- duration_minutes is left NULL so the trigger derives it.
 INSERT INTO sleep_logs (student_id, sleep_date, bedtime, wake_time, quality)
 SELECT s.student_id,
        d.date,
-       datetime(d.date, '-1 day', '+23 hours', '+' || (abs(random()) % 150) || ' minutes'),
-       datetime(d.date, '+7 hours', '+' || (abs(random()) % 90) || ' minutes'),
+       datetime(d.date, '-1 day', '+22 hours', '+30 minutes',
+                '+' || (abs(random()) % 210) || ' minutes'),
+       datetime(d.date, '+6 hours', '+15 minutes',
+                '+' || (abs(random()) % 135) || ' minutes'),
        1 + abs(random()) % 5
 FROM   students s CROSS JOIN seed_days d;
 
@@ -72,11 +76,11 @@ SELECT s.student_id,
        t.task_name,
        t.subject,
        t.task_type,
-       datetime('now', t.due_offset || ' days', 'start of day', '+23 hours', '+59 minutes'),
+       datetime('now', 'localtime', t.due_offset || ' days', 'start of day', '+23 hours', '+59 minutes'),
        t.effort,
        t.priority,
        t.status,
-       datetime('now', '-' || (13 - t.created_offset) || ' days')
+       datetime('now', 'localtime', '-' || (13 - t.created_offset) || ' days')
 FROM   students s
 CROSS  JOIN (
     SELECT 'Linear Algebra problem set' AS task_name, 'Mathematics'       AS subject, 'assignment' AS task_type,  '+2' AS due_offset,  4.0 AS effort, 'high'   AS priority, 'pending'     AS status, 0 AS created_offset
@@ -106,20 +110,76 @@ FROM   students s CROSS JOIN seed_days d
 WHERE  CAST(strftime('%w', d.date) AS INTEGER) = 3;
 
 -- ---------------------------------------------------------------------
--- study_sessions: up to two per student per day, attached to that student's
--- own tasks. duration_minutes is left NULL so the trigger derives it.
+-- study_sessions: up to three per student per day, spread across morning,
+-- afternoon and evening so the time-of-day focus breakdown has more than one
+-- bar in it. Focus ratings taper through the day, which is the pattern the
+-- analytics screen is meant to surface rather than assert.
+-- duration_minutes is left NULL so the trigger derives it.
+--
+-- MATERIALIZED matters here: random() is re-evaluated on every reference, so
+-- without it the start-time jitter would be drawn twice and end_time could
+-- land before start_time, tripping the table's own CHECK.
 INSERT INTO study_sessions (student_id, task_id, start_time, end_time, focus_rating)
+WITH planned AS MATERIALIZED (
+    SELECT s.student_id                                   AS student_id,
+           (SELECT t.task_id FROM academic_tasks t
+             WHERE t.student_id = s.student_id
+             ORDER BY random() LIMIT 1)                   AS task_id,
+           datetime(d.date, '+' || slot.hour || ' hours',
+                    '+' || (abs(random()) % slot.jitter) || ' minutes')
+                                                          AS start_time,
+           40 + abs(random()) % 80                        AS minutes,
+           MAX(1, MIN(5, slot.focus_base + abs(random()) % 2))
+                                                          AS focus_rating
+    FROM   students s
+    CROSS  JOIN seed_days d
+    CROSS  JOIN (
+        SELECT  8 AS hour, 120 AS jitter, 4 AS focus_base, 8 AS odds  -- morning
+        UNION ALL SELECT 14, 180, 3, 7                                -- afternoon
+        UNION ALL SELECT 20, 150, 2, 5                                -- evening
+    ) slot
+    WHERE  abs(random()) % 10 < slot.odds
+)
+SELECT student_id, task_id, start_time,
+       datetime(start_time, '+' || minutes || ' minutes'),
+       focus_rating
+FROM   planned;
+
+-- ---------------------------------------------------------------------
+-- assessments: graded work already returned, spread over the last 5 weeks.
+-- Subjects match the academic_tasks above so the two screens line up.
+INSERT INTO assessments (student_id, subject, title, category, assessed_on,
+                         score, max_score, weight_percent, class_average)
 SELECT s.student_id,
-       (SELECT t.task_id FROM academic_tasks t
-         WHERE t.student_id = s.student_id
-         ORDER BY random() LIMIT 1),
-       datetime(d.date, '+14 hours', '+' || (n * 3) || ' hours'),
-       datetime(d.date, '+14 hours', '+' || (n * 3) || ' hours',
-                '+' || (45 + abs(random()) % 75) || ' minutes'),
-       1 + abs(random()) % 5
+       a.subject,
+       a.title,
+       a.category,
+       date('now', 'localtime', a.day_offset || ' days'),
+       -- a per-student spread so the three seeded students do not look identical
+       MIN(a.max_score, ROUND(a.score + (s.student_id - 2) * 3.0, 1)),
+       a.max_score,
+       a.weight_percent,
+       a.class_average
 FROM   students s
-CROSS  JOIN seed_days d
-CROSS  JOIN (SELECT 0 AS n UNION ALL SELECT 1) sess
-WHERE  abs(random()) % 10 < 7;
+CROSS  JOIN (
+    SELECT 'Mathematics'       AS subject, 'Quiz 1: Vector spaces'          AS title, 'quiz'       AS category, '-33' AS day_offset, 88.0 AS score, 100.0 AS max_score,  5.0 AS weight_percent, 79.0 AS class_average
+    UNION ALL SELECT 'Databases',         'Quiz 1: Relational algebra',     'quiz',       '-30', 91.0, 100.0,  5.0, 82.5
+    UNION ALL SELECT 'Operating Systems', 'Lab 2: Process scheduling',      'lab',        '-26', 94.0, 100.0, 10.0, 85.0
+    UNION ALL SELECT 'Mathematics',       'Problem set 4',                  'assignment', '-21', 82.0, 100.0,  8.0, 78.0
+    UNION ALL SELECT 'Networks',          'Quiz 2: TCP congestion control', 'quiz',       '-17', 76.0, 100.0,  5.0, 74.5
+    UNION ALL SELECT 'Humanities',        'Response essay: ethics of AI',   'assignment', '-14', 85.0, 100.0, 10.0, 80.0
+    UNION ALL SELECT 'Databases',         'Mid-term 1: Normalisation',      'exam',       '-11', 87.0, 100.0, 20.0, 76.0
+    UNION ALL SELECT 'Operating Systems', 'Lab 3: Virtual memory',          'lab',         '-8', 96.0, 100.0, 10.0, 88.0
+    UNION ALL SELECT 'Capstone',          'Proposal checkpoint review',     'project',     '-5', 90.0, 100.0, 15.0, 84.0
+    UNION ALL SELECT 'Networks',          'Seminar participation',          'participation','-3', 92.0, 100.0,  5.0, 87.0
+) a;
+
+-- Attach the marks to the seeded task of the same subject where one exists,
+-- so the grade ledger can link back to the coursework it came from.
+UPDATE assessments
+   SET task_id = (SELECT t.task_id FROM academic_tasks t
+                   WHERE t.student_id = assessments.student_id
+                     AND t.subject    = assessments.subject
+                   ORDER BY t.task_id LIMIT 1);
 
 DROP TABLE seed_days;

@@ -23,7 +23,8 @@ sys.path.insert(0, str(ROOT))
 from vinhack.db import connect  # noqa: E402
 
 TABLE_ORDER = ["students", "sleep_logs", "screen_time", "academic_tasks",
-               "calendar_events", "mood_energy", "study_sessions", "daily_metrics"]
+               "calendar_events", "mood_energy", "study_sessions", "assessments",
+               "daily_metrics"]
 
 GRAIN = {
     "students":        "One row per student.",
@@ -33,6 +34,7 @@ GRAIN = {
     "calendar_events": "One row per calendar event.",
     "mood_energy":     "One row per student per day.",
     "study_sessions":  "One row per study session.",
+    "assessments":     "One row per graded item that came back with a mark on it.",
     "daily_metrics":   "One row per student per day. Derived - rebuilt by rollup.sql, never written by hand.",
 }
 
@@ -42,6 +44,8 @@ NOTES = {
     "study_sessions.duration_minutes":  "Derived by trigger from start_time and end_time when not supplied.",
     "academic_tasks.completed_at":      "Managed by trigger: set when status becomes 'completed', cleared otherwise.",
     "study_sessions.task_id":           "ON DELETE SET NULL, so logged effort survives the task being deleted.",
+    "assessments.task_id":              "ON DELETE SET NULL, so a grade survives the task it came from being deleted.",
+    "assessments.weight_percent":       "Share of the final subject grade. Items without one are averaged evenly.",
 }
 
 conn = connect(ROOT / "db" / "vinhack.db")
