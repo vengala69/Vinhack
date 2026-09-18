@@ -1,0 +1,7 @@
+# SQLite database files
+db/*.db
+db/*.db-wal
+db/*.db-shm
+
+__pycache__/
+*.pyc
