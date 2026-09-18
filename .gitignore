@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# generated intermediate for the schema PDF
+docs/schema.html
