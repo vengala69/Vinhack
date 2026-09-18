@@ -74,7 +74,11 @@ List endpoints accept `?from=` and `?to=` dates and a `?limit=`.
 
 ### Conventions the frontend must follow
 
-- **Dates** are `"YYYY-MM-DD"`, **timestamps** are `"YYYY-MM-DD HH:MM:SS"`.
+- **Timestamps are normalised for you.** Send whatever your date library
+  produces — `Date.toISOString()` output, a `T` separator, a `+05:30` offset —
+  and the API converts it to the stored format (`"YYYY-MM-DD HH:MM:SS"`, UTC).
+  Offset-aware values are converted to UTC, so send the offset rather than
+  stripping it. Date-only fields accept a full timestamp and keep the date part.
 - **Sleep and study durations are derived.** Post `bedtime`/`wake_time` (or
   `start_time`/`end_time`) and leave `duration_minutes` out; the database fills
   it in. A study session posted without `end_time` is a running timer — PATCH
