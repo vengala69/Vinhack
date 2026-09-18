@@ -1,7 +1,10 @@
-# SQLite database files
+# SQLite database files - generated, rebuild with `py db/setup.py --reset --seed`
 db/*.db
 db/*.db-wal
 db/*.db-shm
 
+# Python
 __pycache__/
 *.pyc
+.venv/
+venv/

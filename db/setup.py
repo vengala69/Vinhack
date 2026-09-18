@@ -1,39 +1,24 @@
 #!/usr/bin/env python3
 """Build the VinHack SQLite database.
 
-    py setup.py              # schema only (keeps an existing db)
-    py setup.py --seed       # schema + dev seed data + rollup
-    py setup.py --reset      # delete the db file first, then rebuild
-    py setup.py --rollup     # just recompute daily_metrics
+    py db/setup.py              # schema only (keeps an existing db)
+    py db/setup.py --seed       # schema + dev seed data + rollup
+    py db/setup.py --reset      # delete the db file first, then rebuild
+    py db/setup.py --rollup     # just recompute daily_metrics
 
 The database file is db/vinhack.db unless $VINHACK_DB says otherwise.
+Application code should not import from here - use vinhack.db.connect().
 """
-import os
 import sqlite3
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).parent
-DB_PATH = Path(os.environ.get("VINHACK_DB", HERE / "vinhack.db"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from vinhack.db import DB_PATH, connect, run_script, schema_exists  # noqa: E402
 
-def connect(path: Path = DB_PATH) -> sqlite3.Connection:
-    """Open a connection with the pragmas VinHack expects.
-
-    foreign_keys is off by default in SQLite and is per-connection, so every
-    part of the app must set it or the cascades silently do nothing.
-    """
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def run_script(conn: sqlite3.Connection, name: str) -> None:
-    print(f"==> {name}")
-    conn.executescript((HERE / name).read_text(encoding="utf-8"))
-    conn.commit()
+TABLES = ("students", "sleep_logs", "screen_time", "academic_tasks",
+          "calendar_events", "mood_energy", "study_sessions", "daily_metrics")
 
 
 def main() -> int:
@@ -41,8 +26,7 @@ def main() -> int:
 
     if "--reset" in args and DB_PATH.exists():
         print(f"==> removing {DB_PATH.name}")
-        conn = sqlite3.connect(DB_PATH)
-        conn.close()
+        sqlite3.connect(DB_PATH).close()
         DB_PATH.unlink()
         for suffix in ("-wal", "-shm"):
             sidecar = DB_PATH.with_name(DB_PATH.name + suffix)
@@ -52,24 +36,23 @@ def main() -> int:
     conn = connect()
     try:
         if "--rollup" in args:
+            print("==> rollup.sql")
             run_script(conn, "rollup.sql")
         else:
-            existing = conn.execute(
-                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='students'"
-            ).fetchone()[0]
-            if existing:
+            if schema_exists(conn):
                 print("==> schema already present, skipping schema.sql")
             else:
+                print("==> schema.sql")
                 run_script(conn, "schema.sql")
 
             if "--seed" in args:
+                print("==> seed_dev.sql")
                 run_script(conn, "seed_dev.sql")
+                print("==> rollup.sql")
                 run_script(conn, "rollup.sql")
 
         print()
-        for table in ("students", "sleep_logs", "screen_time", "academic_tasks",
-                      "calendar_events", "mood_energy", "study_sessions",
-                      "daily_metrics"):
+        for table in TABLES:
             n = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             print(f"  {table:<16} {n:>5} rows")
         print(f"\n{DB_PATH}")

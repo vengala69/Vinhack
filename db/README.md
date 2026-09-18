@@ -16,16 +16,17 @@ db/
 Nothing to install — Python ships with SQLite built in.
 
 ```
-cd db
-py setup.py --reset --seed
+py db/setup.py --reset --seed
 ```
+
+Run it from the project root.
 
 | Command | What it does |
 |---|---|
-| `py setup.py` | Create the schema if it isn't there yet |
-| `py setup.py --seed` | Schema + seed data + rollup |
-| `py setup.py --reset` | Delete the database file first, then rebuild |
-| `py setup.py --rollup` | Just recompute `daily_metrics` |
+| `py db/setup.py` | Create the schema if it isn't there yet |
+| `py db/setup.py --seed` | Schema + seed data + rollup |
+| `py db/setup.py --reset` | Delete the database file first, then rebuild |
+| `py db/setup.py --rollup` | Just recompute `daily_metrics` |
 
 Set `$VINHACK_DB` to put the file somewhere other than `db/vinhack.db`.
 
@@ -34,7 +35,7 @@ Set `$VINHACK_DB` to put the file somewhere other than `db/vinhack.db`.
 Import the helper rather than calling `sqlite3.connect` directly:
 
 ```python
-from db.setup import connect
+from vinhack.db import connect
 
 conn = connect()
 rows = conn.execute("SELECT * FROM v_open_tasks WHERE student_id = ?", (1,)).fetchall()
@@ -75,7 +76,7 @@ so logged effort is never lost.
 work. It is rebuilt, not incrementally updated:
 
 ```
-py setup.py --rollup
+py db/setup.py --rollup
 ```
 
 It is idempotent — re-running overwrites rows rather than duplicating them. It
@@ -98,7 +99,12 @@ bottom of `rollup.sql`:
 
 ## Status
 
-Verified on Python 3.12 / SQLite 3.45. `py setup.py --reset --seed` builds
-clean and the derived logic was checked against the seed data: triggers fill
-every duration, the generated column matches its inputs, `completed_at` is set
-only for completed tasks, and no `daily_metrics` column comes out null.
+Verified on Python 3.12 / SQLite 3.45. `py db/setup.py --reset --seed` builds
+clean, and the derived logic was checked both against the seed data and
+end-to-end through the API: triggers fill every duration, the generated column
+matches its inputs, `completed_at` tracks task status in both directions,
+deleting a student clears all seven child tables, and no `daily_metrics` column
+comes out null.
+
+The API in [`vinhack/`](../vinhack) is the intended way in; see the
+[root README](../README.md).
