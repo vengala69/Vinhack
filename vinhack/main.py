@@ -753,7 +753,7 @@ def wellbeing_status():
         "model_available": wellbeing.configured(),
         "model": wellbeing.MODEL if wellbeing.configured() else None,
         "detail": None if wellbeing.configured() else
-                  "No ANTHROPIC_API_KEY is set, so the chat cannot answer. Put the key "
+                  "No LLM_API_KEY is set, so the chat cannot answer. Put the key "
                   "in .env (see .env.example) and restart the server.",
     }
 
@@ -769,7 +769,7 @@ def wellbeing_chat(student_id: int, body: m.ChatIn, conn=Depends(get_conn)):
     """
     require_student(conn, student_id)
     if not wellbeing.configured():
-        raise HTTPException(503, "No ANTHROPIC_API_KEY is set on the server.")
+        raise HTTPException(503, "No LLM_API_KEY is set on the server.")
 
     student = one(conn.execute(
         "SELECT * FROM students WHERE student_id = ?", (student_id,)))

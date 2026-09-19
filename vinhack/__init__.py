@@ -1,6 +1,6 @@
 """VinHack package.
 
-Reads .env first so ANTHROPIC_API_KEY and LLM_MODEL are available to every
+Reads .env first so LLM_API_KEY and LLM_MODEL are available to every
 module that imports os.environ at module scope.
 """
 import os

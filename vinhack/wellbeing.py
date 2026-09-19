@@ -1,4 +1,4 @@
-"""The wellbeing chat, backed by Claude.
+"""The wellbeing chat, backed by a real model.
 
 Two things make this different from a generic chatbot wrapper:
 
@@ -9,17 +9,26 @@ Two things make this different from a generic chatbot wrapper:
     companion, not a counsellor, and that anything touching self-harm gets a
     short reply pointing at real help rather than a coaching conversation.
 
+The call is a plain POST to an OpenAI-compatible /chat/completions endpoint,
+so Groq, OpenAI, OpenRouter, Together or a local Ollama all work by changing
+LLM_BASE_URL alone. It uses urllib, so the app needs no extra dependency.
+
 If no API key is configured the endpoint returns 503 and the page says so.
 There is no second response path: a reply on that screen either came from the
 model or is an error message saying it did not.
 """
+import json
 import os
+import urllib.error
+import urllib.request
 from typing import Any, Optional
 
-# Chosen by the deployment, not by the source. See .env.example.
-MODEL = os.environ.get("LLM_MODEL") or os.environ.get("ANTHROPIC_MODEL") or "claude-opus-5"
+# All chosen by the deployment, not by the source. See .env.example.
+BASE_URL = os.environ.get("LLM_BASE_URL") or "https://api.groq.com/openai/v1"
+MODEL = os.environ.get("LLM_MODEL") or "llama-3.3-70b-versatile"
 MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS") or 700)
 MAX_HISTORY = int(os.environ.get("LLM_MAX_HISTORY") or 12)   # turns kept
+TIMEOUT = int(os.environ.get("LLM_TIMEOUT") or 30)
 
 SYSTEM = """You are a study-habits companion inside VinHack, an app a student \
 uses to track their own sleep, coursework and focus sessions. You are talking \
@@ -48,9 +57,18 @@ crisis line (in India, Tele-MANAS on 14416; elsewhere, findahelpline.com). Do \
 not attempt to counsel them, and do not ask probing questions."""
 
 
+def api_key() -> Optional[str]:
+    """The key, from whichever variable the deployment used."""
+    for name in ("LLM_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY"):
+        value = (os.environ.get(name) or "").strip()
+        if value:
+            return value
+    return None
+
+
 def configured() -> bool:
-    """True when there is a credential the SDK can use."""
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    """True when there is a credential to call the model with."""
+    return api_key() is not None
 
 
 def _line(label: str, value: Any, suffix: str = "") -> Optional[str]:
@@ -110,17 +128,19 @@ def context_block(insights: dict, tasks: list[dict], student: dict) -> str:
 
 
 def reply(message: str, history: list[dict], context: str) -> dict:
-    """Ask Claude for one reply. Raises RuntimeError with a usable message."""
-    try:
-        import anthropic
-    except ImportError as exc:                      # pragma: no cover - env dependent
-        raise RuntimeError(
-            "The anthropic package is not installed. Run: py -m pip install anthropic"
-        ) from exc
+    """Ask the model for one reply. Raises RuntimeError with a usable message.
 
-    client = anthropic.Anthropic()
+    The user's message is passed through exactly as typed - nothing here reads
+    it to decide what to do with it.
+    """
+    key = api_key()
+    if not key:
+        raise RuntimeError("No LLM_API_KEY is set.")
 
-    turns: list[dict] = []
+    turns: list[dict] = [{
+        "role": "system",
+        "content": SYSTEM + "\n\nTheir figures right now:\n\n" + context,
+    }]
     for turn in history[-MAX_HISTORY:]:
         role = turn.get("role")
         text = (turn.get("content") or "").strip()
@@ -128,38 +148,44 @@ def reply(message: str, history: list[dict], context: str) -> dict:
             turns.append({"role": role, "content": text})
     turns.append({"role": "user", "content": message})
 
-    # The conversation has to start with a user turn.
-    while turns and turns[0]["role"] != "user":
-        turns.pop(0)
+    payload = json.dumps({
+        "model": MODEL,
+        "max_tokens": MAX_TOKENS,
+        "temperature": 0.6,
+        "messages": turns,
+    }).encode("utf-8")
 
+    request = urllib.request.Request(
+        BASE_URL.rstrip("/") + "/chat/completions",
+        data=payload,
+        headers={"Authorization": "Bearer " + key,
+                 "Content-Type": "application/json"},
+        method="POST",
+    )
     try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=[
-                {"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}},
-                {"type": "text", "text": "Their figures right now:\n\n" + context},
-            ],
-            # A short supportive reply does not need deep reasoning, and the
-            # student is waiting on it.
-            output_config={"effort": "low"},
-            messages=turns,
-        )
-    except Exception as exc:                        # surfaced to the UI as-is
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # The body carries the provider's reason - a bad model name, an
+        # expired key - and is worth far more in the log than the status.
+        detail = exc.read().decode("utf-8", "replace")[:400]
+        raise RuntimeError(f"HTTP {exc.code} from the model API: {detail}") from exc
+    except Exception as exc:
         raise RuntimeError(f"{type(exc).__name__}: {exc}") from exc
 
-    if response.stop_reason == "refusal":
-        raise RuntimeError("The model declined to answer that one.")
-
-    text = "".join(block.text for block in response.content if block.type == "text").strip()
+    try:
+        text = (body["choices"][0]["message"]["content"] or "").strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError(f"Unexpected response shape: {str(body)[:300]}") from exc
     if not text:
         raise RuntimeError("The model returned an empty reply.")
 
+    usage = body.get("usage") or {}
     return {
         "reply": text,
-        "model": response.model,
+        "model": body.get("model") or MODEL,
         "usage": {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
+            "input_tokens": usage.get("prompt_tokens"),
+            "output_tokens": usage.get("completion_tokens"),
         },
     }

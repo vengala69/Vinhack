@@ -2,7 +2,5 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 pydantic[email]>=2.7
 
-# Optional: only needed for the wellbeing chat on the Therapist screen.
-# Without it (or without ANTHROPIC_API_KEY) that page falls back to
-# scripted replies and everything else still works.
-anthropic>=0.40
+# The wellbeing chat talks to an OpenAI-compatible endpoint over urllib,
+# so it needs no vendor SDK. Configure it in .env (see .env.example).

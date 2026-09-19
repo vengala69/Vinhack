@@ -190,7 +190,7 @@
       /* A failed call is reported as a failure. Nothing canned stands in for
        * the model, because a fake answer here would be worse than none. */
       var detail = (err && err.status === 503)
-        ? 'No model is configured on the server, so I cannot answer. Add ANTHROPIC_API_KEY ' +
+        ? 'No model is configured on the server, so I cannot answer. Add LLM_API_KEY ' +
           'to .env and restart.'
         : 'I am having trouble responding right now. Please try again.';
       say('Dr. Sync', '<span class="text-error">' + VH.fmt.esc(detail) + '</span>', false);
