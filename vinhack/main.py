@@ -19,7 +19,8 @@ from . import wellbeing
 from .db import (DB_PATH, ROOT, add_missing_columns, connect, get_conn, insert, one,
                  rows, run_script, schema_exists, update)
 
-log = logging.getLogger("vinhack.wellbeing")
+# uvicorn owns the console handler; its logger is the one that actually prints.
+log = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
     title="VinHack API",
@@ -758,6 +759,18 @@ def wellbeing_status():
     }
 
 
+@app.get("/api/wellbeing/models", tags=["wellbeing"])
+def wellbeing_models():
+    """Which model ids this key can use. Open in a browser when one 404s."""
+    if not wellbeing.configured():
+        raise HTTPException(503, "No LLM_API_KEY is set on the server.")
+    try:
+        return {"configured": wellbeing.MODEL, "available": wellbeing.available_models()}
+    except RuntimeError as exc:
+        log.error("listing models failed: %s", exc)
+        raise HTTPException(502, str(exc))
+
+
 @app.post("/api/students/{student_id}/wellbeing/chat", tags=["wellbeing"])
 def wellbeing_chat(student_id: int, body: m.ChatIn, conn=Depends(get_conn)):
     """One reply from the model, grounded in this student's own logged figures.
@@ -784,7 +797,7 @@ def wellbeing_chat(student_id: int, body: m.ChatIn, conn=Depends(get_conn)):
         # Full detail to the server log for debugging; the client gets a plain
         # message, because provider errors can echo back request internals.
         log.error("wellbeing chat failed for student %s: %s", student_id, exc)
-        raise HTTPException(502, "The chat model could not be reached. Please try again.")
+        raise HTTPException(502, f"The chat model could not be reached: {exc}")
 
 
 # ---------------------------------------------------------------------

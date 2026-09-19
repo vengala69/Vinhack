@@ -25,7 +25,7 @@ from typing import Any, Optional
 
 # All chosen by the deployment, not by the source. See .env.example.
 BASE_URL = os.environ.get("LLM_BASE_URL") or "https://api.groq.com/openai/v1"
-MODEL = os.environ.get("LLM_MODEL") or "llama-3.3-70b-versatile"
+MODEL = os.environ.get("LLM_MODEL") or "openai/gpt-oss-120b"
 MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS") or 700)
 MAX_HISTORY = int(os.environ.get("LLM_MAX_HISTORY") or 12)   # turns kept
 TIMEOUT = int(os.environ.get("LLM_TIMEOUT") or 30)
@@ -127,6 +127,27 @@ def context_block(insights: dict, tasks: list[dict], student: dict) -> str:
     return "\n".join(lines)
 
 
+def available_models() -> list[str]:
+    """Model ids this key can actually use - handy when one 404s."""
+    key = api_key()
+    if not key:
+        raise RuntimeError("No LLM_API_KEY is set.")
+    request = urllib.request.Request(
+        BASE_URL.rstrip("/") + "/models",
+        headers={"Authorization": "Bearer " + key,
+                 "Accept": "application/json",
+                 "User-Agent": "VinHack/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"HTTP {exc.code}: {exc.read().decode('utf-8','replace')[:300]}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"{type(exc).__name__}: {exc}") from exc
+    return sorted(m.get("id", "") for m in (body.get("data") or []))
+
+
 def reply(message: str, history: list[dict], context: str) -> dict:
     """Ask the model for one reply. Raises RuntimeError with a usable message.
 
@@ -159,7 +180,11 @@ def reply(message: str, history: list[dict], context: str) -> dict:
         BASE_URL.rstrip("/") + "/chat/completions",
         data=payload,
         headers={"Authorization": "Bearer " + key,
-                 "Content-Type": "application/json"},
+                 "Content-Type": "application/json",
+                 "Accept": "application/json",
+                 # urllib defaults to "Python-urllib/3.x", which Cloudflare
+                 # blocks outright in front of some providers (error 1010).
+                 "User-Agent": "VinHack/1.0 (+https://github.com/vengala69/Vinhack)"},
         method="POST",
     )
     try:
