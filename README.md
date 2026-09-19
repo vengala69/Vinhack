@@ -45,7 +45,7 @@ students with a fortnight of history each.
 | `focus.html` | `/sessions`, `/tasks`, `/insights` | study sessions |
 | `scores.html` | `/grades`, `/assessments` | assessments |
 | `analytics.html` | `/insights`, `/grades` | — |
-| `therapist.html` | mood, sleep, tasks, `/insights` | — |
+| `therapist.html` | mood, sleep, tasks, `/insights`, `/wellbeing/status` | — (the chat is not stored) |
 | `settings.html` | `/students/{id}`, `/health` | the student record |
 
 Two conventions worth knowing before editing a page:
@@ -74,14 +74,45 @@ a heart rate is worse than one that admits it has not got one:
   which it can actually measure.
 - **Canvas / VTOP / Google Calendar / Apple HealthKit integrations.** None
   exist. Those panels now report the local SQLite file.
-- **The flashcard deck, the clinician roster and the bookable appointments.**
-  No table, no endpoint, no way for a student to add one.
+- **The clinician roster and the bookable appointments.** No table, no
+  endpoint, and confirming an appointment nobody made is worse than saying so.
+  That panel points at real support instead.
+- **The flashcard deck.** No table, no endpoint, no way to add a card.
 - **The "Official Rest Clearance" PDF**, which generated a medical document
   complete with an issuing health centre and a diagnosis. It is now a plain
   summary of self-reported figures, with no authority attached to it.
 - **Notification toggles.** There is no scheduler and no push channel behind
   this build, so the switches would have done nothing. The reminders that do
   work write calendar events.
+
+### The wellbeing chat
+
+The chat on the Therapist screen talks to Claude, grounded in the student's own
+figures &mdash; it is handed their sleep average, energy, streak and open
+deadlines, so it answers about their week rather than in the abstract. The
+prompt is explicit that it is a study-habits companion and not a counsellor,
+and that anything touching self-harm gets a short reply pointing at real help
+rather than a coaching conversation.
+
+It is optional. Without a key the screen falls back to built-in scripted
+replies and says so on the page; nothing else changes.
+
+```
+py -m pip install anthropic
+set ANTHROPIC_API_KEY=sk-ant-...     # PowerShell: $env:ANTHROPIC_API_KEY="sk-ant-..."
+py -m uvicorn vinhack.main:app --reload --port 8010
+```
+
+`GET /api/wellbeing/status` reports which mode it is in. Conversations are not
+stored: the page holds the transcript and sends it back with each message, and
+it is gone when the tab closes.
+
+### Sound
+
+The soundscapes on Focus Mode and the Therapist screen are synthesised in the
+browser with the Web Audio API &mdash; binaural beats from paired oscillators,
+rain and room tone from filtered noise. Nothing is downloaded and nothing is
+licensed. The binaural tracks only work on headphones, which the player says.
 
 ## API
 
@@ -127,6 +158,8 @@ await fetch(`${API}/students/1/sleep`, {
 | GET | `/api/students/{id}/metrics` | The `daily_metrics` rollup, ready to plot |
 | GET | `/api/students/{id}/dashboard` | Everything a dashboard needs, one call |
 | GET | `/api/students/{id}/insights` | Derived scores, streak, correlations |
+| GET | `/api/wellbeing/status` | Whether the chat has a model behind it |
+| POST | `/api/students/{id}/wellbeing/chat` | One grounded reply; 503 with no key |
 | POST | `/api/rollup` | Recompute `daily_metrics` |
 
 List endpoints accept `?from=` and `?to=` dates and a `?limit=`.

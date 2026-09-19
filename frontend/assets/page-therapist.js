@@ -14,7 +14,7 @@
   'use strict';
 
   var ctx = null;
-  var state = { mood: [], sleep: [], tasks: [] };
+  var state = { mood: [], sleep: [], tasks: [], history: [], model: null, sending: false };
 
   function $(id) { return document.getElementById(id); }
   function set(id, text) { var el = $(id); if (el) el.textContent = text; }
@@ -116,9 +116,13 @@
       ? 'Going on what you have logged: ' + bits.join(', ') + '.'
       : 'There is not much logged yet, so this is starting from scratch.';
 
-    return lead + '<br><br>This box is a set of scripted replies, not a person and not an AI ' +
-      'service &mdash; nothing you type is saved or sent anywhere. Use it to get a thought out ' +
-      'of your head, then talk to someone who can actually help.';
+    var caveat = state.model
+      ? 'This is an AI, not a person and not a counsellor. Nothing you type is stored &mdash; ' +
+        'it is sent to the model for one reply and then forgotten. For anything serious, ' +
+        'talk to someone real.'
+      : 'This box is a set of scripted replies &mdash; no model is configured, so it is ' +
+        'pattern-matching on keywords. Nothing you type is saved or sent anywhere.';
+    return lead + '<br><br>' + caveat;
   }
 
   var REPLIES = [
@@ -185,10 +189,73 @@
     transcript.scrollTop = transcript.scrollHeight;
   }
 
-  function send(text) {
-    if (!text || !text.trim()) return;
-    say(ctx.student.name, VH.fmt.esc(text.trim()), true);
-    setTimeout(function () { say('Prompt', reply(text), false); }, 400);
+  function thinking() {
+    var transcript = $('chatTranscript');
+    if (!transcript) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'flex flex-col gap-1 max-w-[90%] self-start';
+    wrap.innerHTML = '<div class="px-space-md py-space-sm rounded-2xl rounded-bl-sm ' +
+      'bg-surface-container-high text-on-surface-variant font-body-md text-body-md ' +
+      'flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-primary ' +
+      'animate-pulse"></span>thinking&hellip;</div>';
+    transcript.appendChild(wrap);
+    transcript.scrollTop = transcript.scrollHeight;
+    return wrap;
+  }
+
+  async function send(text) {
+    text = (text || '').trim();
+    if (!text || state.sending) return;
+    state.sending = true;
+    say(ctx.student.name, VH.fmt.esc(text), true);
+
+    var pending = thinking();
+    var who = state.model ? 'Dr. Sync' : 'Prompt';
+    try {
+      if (!state.model) throw new Error('no model');
+      var answer = await VH.api.wellbeingChat(ctx.student.student_id, {
+        message: text,
+        history: state.history.slice(-12)
+      });
+      if (pending) pending.remove();
+      /* The model writes prose, not markup - escape it, then honour blank
+       * lines as paragraph breaks. */
+      say(who, VH.fmt.esc(answer.reply).replace(/\n\n+/g, '<br><br>')
+                                      .replace(/\n/g, '<br>'), false);
+      state.history.push({ role: 'user', content: text });
+      state.history.push({ role: 'assistant', content: answer.reply });
+    } catch (err) {
+      if (pending) pending.remove();
+      if (state.model && !/no model/.test(err.message || '')) {
+        /* The model was supposed to be there and something went wrong. Say so
+         * rather than silently switching to canned text. */
+        VH.toast('Chat model unavailable, using built-in replies.', 'info');
+        state.model = null;
+        paintMode();
+      }
+      say('Prompt', reply(text), false);
+    } finally {
+      state.sending = false;
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * Audio
+   * ---------------------------------------------------------------- */
+
+  function setTrack(playing, label, index) {
+    var bar = $('audioPlayerStatus');
+    var text = $('nowPlayingText');
+    var icons = document.querySelectorAll('.play-icon');
+    Array.prototype.forEach.call(icons, function (icon) { icon.textContent = 'play_arrow'; });
+
+    if (!playing) {
+      if (bar) bar.classList.add('hidden');
+      return;
+    }
+    if (bar) bar.classList.remove('hidden');
+    if (text) text.textContent = 'Playing: ' + label + ' — best on headphones';
+    if (index !== undefined && icons[index]) icons[index].textContent = 'pause';
   }
 
   /* ------------------------------------------------------------------
@@ -231,8 +298,9 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var input = $('chatInput');
-        send(input.value);
+        var text = input.value;
         input.value = '';
+        send(text).catch(function (err) { VH.fail(err, 'Chat'); });
       });
     }
 
@@ -272,23 +340,49 @@
           e.preventDefault();
           VH.toast('These are summaries, not linked articles in this build.', 'info');
         });
-      } else if (/Launch NSDR Audio|Stop Audio/i.test(label)) {
+      } else if (/Launch NSDR Audio/i.test(label)) {
         btn.addEventListener('click', function (e) {
           e.preventDefault();
-          VH.toast('No audio ships with this build. Focus Mode has synthesised soundscapes.', 'info');
+          setTrack(VH.audio.play('nsdr'), 'Non-sleep deep rest bed');
         });
       }
     });
 
-    /* The audio tiles in the frequency panel. */
-    Array.prototype.forEach.call(document.querySelectorAll('.play-icon'), function (icon) {
+    /* The four tiles, in the order they appear in the markup. */
+    var TRACKS = [
+      { key: 'alpha', label: 'Alpha binaural, 10Hz' },
+      { key: 'theta432', label: '432Hz carrier, 6Hz beat' },
+      { key: 'vagus', label: 'Low 110Hz hum' },
+      { key: 'rain', label: 'Rain-like filtered noise' }
+    ];
+    Array.prototype.forEach.call(document.querySelectorAll('.play-icon'), function (icon, index) {
       var btn = icon.closest('button');
-      if (!btn) return;
+      var track = TRACKS[index];
+      if (!btn || !track) return;
       btn.addEventListener('click', function (e) {
         e.preventDefault();
-        VH.toast('No audio files ship with this build — try the soundscapes in Focus Mode.', 'info');
+        setTrack(VH.audio.play(track.key), track.label, index);
       });
     });
+
+    var stop = $('audioPlayerStatus')
+      ? $('audioPlayerStatus').querySelector('button') : null;
+    if (stop) {
+      stop.addEventListener('click', function (e) {
+        e.preventDefault();
+        VH.audio.stop();
+        setTrack(null);
+      });
+    }
+  }
+
+  function paintMode() {
+    var label = document.querySelector('[data-vh-chat-mode]');
+    if (label) {
+      label.textContent = state.model
+        ? 'Answers from ' + state.model
+        : 'Built-in replies — no model configured';
+    }
   }
 
   async function reload() {
@@ -312,7 +406,18 @@
     if (!ctx) return;
     wire();
     await reload();
-    say('Prompt', opener(), false);
+
+    var subtitle = document.querySelector('#therapistPanel p');
+    if (subtitle) subtitle.setAttribute('data-vh-chat-mode', '');
+    try {
+      var status = await VH.api.wellbeingStatus();
+      state.model = status.model_available ? status.model : null;
+    } catch (err) {
+      state.model = null;
+    }
+    paintMode();
+
+    say(state.model ? 'Dr. Sync' : 'Prompt', opener(), false);
   }
 
   boot().catch(function (err) { VH.fail(err, 'Wellbeing'); });

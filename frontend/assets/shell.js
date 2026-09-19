@@ -486,6 +486,11 @@ window.VH = window.VH || {};
 
     if (page === 'login') return null;
 
+    /* ?student=2 opens a specific profile and remembers it, so a page can be
+     * linked to directly rather than only reached through the picker. */
+    var asked = parseInt(new URLSearchParams(window.location.search).get('student'), 10);
+    if (!isNaN(asked)) VH.session.set(asked);
+
     var id = VH.session.id();
     if (!id) {
       window.location.replace('login.html');

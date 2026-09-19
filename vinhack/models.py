@@ -183,3 +183,19 @@ class AssessmentUpdate(BaseModel):
     weight_percent: Optional[float] = Field(None, ge=0, le=100)
     class_average: Optional[float] = Field(None, ge=0)
     task_id: Optional[int] = None
+
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatIn(BaseModel):
+    """One message to the wellbeing chat, plus the turns before it.
+
+    The conversation is not stored anywhere - the page holds it and sends it
+    back each time - so history arrives with the request rather than a
+    thread id.
+    """
+    message: str = Field(min_length=1, max_length=4000)
+    history: list[ChatTurn] = Field(default_factory=list)

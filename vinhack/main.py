@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import models as m
+from . import wellbeing
 from .db import (DB_PATH, ROOT, connect, get_conn, insert, one, rows, run_script,
                  schema_exists, update)
 
@@ -674,6 +675,47 @@ def insights(student_id: int, days: int = 14, conn=Depends(get_conn)):
         "subject_effort": subject_effort,
         "trend": trend,
     }
+
+
+# ---------------------------------------------------------------------
+# Wellbeing chat
+# ---------------------------------------------------------------------
+
+@app.get("/api/wellbeing/status", tags=["wellbeing"])
+def wellbeing_status():
+    """Whether the chat has a model behind it, so the page can say which mode
+    it is in rather than silently degrading."""
+    return {
+        "model_available": wellbeing.configured(),
+        "model": wellbeing.MODEL if wellbeing.configured() else None,
+        "detail": None if wellbeing.configured() else
+                  "No ANTHROPIC_API_KEY is set, so the chat is using its built-in "
+                  "scripted replies. Set the key and restart to enable the model.",
+    }
+
+
+@app.post("/api/students/{student_id}/wellbeing/chat", tags=["wellbeing"])
+def wellbeing_chat(student_id: int, body: m.ChatIn, conn=Depends(get_conn)):
+    """One reply, grounded in this student's own logged figures.
+
+    Returns 503 when no key is configured - the frontend treats that as
+    "fall back to the scripted replies" rather than an error worth showing.
+    """
+    require_student(conn, student_id)
+    if not wellbeing.configured():
+        raise HTTPException(503, "No ANTHROPIC_API_KEY is set on the server.")
+
+    student = one(conn.execute(
+        "SELECT * FROM students WHERE student_id = ?", (student_id,)))
+    context = wellbeing.context_block(
+        insights(student_id, 14, conn),
+        list_tasks(student_id, None, True, conn),
+        student,
+    )
+    try:
+        return wellbeing.reply(body.message, [t.model_dump() for t in body.history], context)
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc))
 
 
 # ---------------------------------------------------------------------

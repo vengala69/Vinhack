@@ -78,8 +78,8 @@
       var items = state.items.filter(function (item) {
         return item.subject === subject.subject;
       }).slice(0, 4);
-      return '<div class="flex flex-col rounded-2xl bg-surface-container-low/90 backdrop-blur-xl ' +
-        'shadow-xl overflow-hidden">' +
+      return '<div class="flex flex-col h-full rounded-2xl bg-surface-container-low/90 ' +
+        'backdrop-blur-xl shadow-xl overflow-hidden">' +
         '<div class="p-space-lg flex flex-col gap-space-sm">' +
         '<div class="flex items-start justify-between gap-space-sm">' +
         '<div class="flex flex-col min-w-0">' +
@@ -111,8 +111,8 @@
             VH.fmt.num(item.max_score, 0) + '</span></span></div>';
         }).join('') +
         '</div></div>' +
-        '<div class="px-space-lg py-space-sm bg-surface-container-lowest/60 flex items-center ' +
-        'justify-between gap-2">' +
+        '<div class="mt-auto px-space-lg py-space-sm bg-surface-container-lowest/60 flex ' +
+        'items-center justify-between gap-2">' +
         '<span class="font-label-sm text-label-sm text-on-surface-variant truncate">' +
         (subject.avg_class_delta === null
           ? 'No class average recorded'

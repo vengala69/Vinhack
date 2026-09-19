@@ -113,7 +113,12 @@ window.VH = window.VH || {};
     metrics: function (id, p) { return request('GET', S(id) + '/metrics' + qs(p)); },
     dashboard: function (id, days) { return request('GET', S(id) + '/dashboard' + qs({ days: days })); },
     insights: function (id, days) { return request('GET', S(id) + '/insights' + qs({ days: days })); },
-    rollup: function () { return request('POST', '/rollup'); }
+    rollup: function () { return request('POST', '/rollup'); },
+
+    wellbeingStatus: function () { return request('GET', '/wellbeing/status'); },
+    wellbeingChat: function (id, body) {
+      return request('POST', S(id) + '/wellbeing/chat', body);
+    }
   };
 
   /* ------------------------------------------------------------------

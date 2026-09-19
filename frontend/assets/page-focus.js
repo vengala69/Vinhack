@@ -179,87 +179,10 @@
   }
 
   /* ------------------------------------------------------------------
-   * Soundscapes, synthesised rather than streamed
+   * Soundscapes
+   *
+   * Synthesised by assets/audio.js, which the wellbeing page shares.
    * ---------------------------------------------------------------- */
-
-  var audio = { context: null, nodes: [], current: null };
-
-  function noiseBuffer(context, brown) {
-    var length = context.sampleRate * 2;
-    var buffer = context.createBuffer(1, length, context.sampleRate);
-    var data = buffer.getChannelData(0);
-    var last = 0;
-    for (var i = 0; i < length; i += 1) {
-      var white = Math.random() * 2 - 1;
-      if (brown) {
-        last = (last + 0.02 * white) / 1.02;
-        data[i] = last * 3.5;
-      } else {
-        data[i] = white;
-      }
-    }
-    return buffer;
-  }
-
-  function stopAudio() {
-    audio.nodes.forEach(function (node) {
-      try { node.stop(); } catch (e) { /* already stopped */ }
-      try { node.disconnect(); } catch (e) { /* already detached */ }
-    });
-    audio.nodes = [];
-    audio.current = null;
-  }
-
-  function playSound(kind) {
-    var Ctor = window.AudioContext || window.webkitAudioContext;
-    if (!Ctor) { VH.toast('This browser has no Web Audio support.', 'error'); return; }
-    stopAudio();
-    if (kind === 'mute') return;
-    if (!audio.context) audio.context = new Ctor();
-    if (audio.context.state === 'suspended') audio.context.resume();
-
-    var context = audio.context;
-    var gain = context.createGain();
-    gain.gain.value = 0.08;
-    gain.connect(context.destination);
-    audio.nodes.push(gain);
-
-    if (kind === 'theta') {
-      /* Two tones six hertz apart, one per ear: the beat is perceptual. */
-      [220, 226].forEach(function (frequency, index) {
-        var osc = context.createOscillator();
-        var pan = context.createStereoPanner ? context.createStereoPanner() : null;
-        osc.frequency.value = frequency;
-        osc.type = 'sine';
-        if (pan) {
-          pan.pan.value = index === 0 ? -1 : 1;
-          osc.connect(pan).connect(gain);
-          audio.nodes.push(pan);
-        } else {
-          osc.connect(gain);
-        }
-        osc.start();
-        audio.nodes.push(osc);
-      });
-    } else {
-      var source = context.createBufferSource();
-      source.buffer = noiseBuffer(context, kind === 'library');
-      source.loop = true;
-      if (kind === 'rain') {
-        var filter = context.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.value = 1400;
-        filter.Q.value = 0.6;
-        source.connect(filter).connect(gain);
-        audio.nodes.push(filter);
-      } else {
-        source.connect(gain);
-      }
-      source.start();
-      audio.nodes.push(source);
-    }
-    audio.current = kind;
-  }
 
   /* ------------------------------------------------------------------
    * Objective
@@ -429,7 +352,13 @@
         });
         tab.className = 'sound-tab px-space-sm py-1.5 rounded-lg bg-surface-container-high ' +
           'text-primary font-label-md text-label-md flex items-center gap-1.5 transition-all shadow-sm';
-        playSound(SOUNDS[index] || 'mute');
+        var playing = VH.audio.play(SOUNDS[index] || 'mute');
+        if (!playing) {
+          /* Toggled off, or muted - drop the active styling back off. */
+          tab.className = 'sound-tab px-space-sm py-1.5 rounded-lg bg-transparent ' +
+            'text-on-surface-variant hover:text-on-surface font-label-md text-label-md ' +
+            'flex items-center gap-1.5 transition-all';
+        }
       });
     });
 
@@ -447,7 +376,7 @@
 
     /* Leaving with a session open is fine - it stays open in the database and
      * is picked back up on return - but the audio should not follow you. */
-    window.addEventListener('beforeunload', stopAudio);
+    /* audio.js stops itself on unload. */
   }
 
   async function reload() {

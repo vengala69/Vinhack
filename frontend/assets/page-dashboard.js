@@ -83,14 +83,16 @@
       ['Thriving', 'Balanced', 'Stretched', 'Depleted']));
 
     /* The three pills under the hero. */
-    var sleepScore = ins.scores.sleep_health;
-    set('ring-sleep-title', band(sleepScore,
-      ['Rested', 'Adequate rest', 'Short on sleep', 'Sleep deficit']));
-    set('ring-sleep-sub', ins.sleep_debt_hours === null
+    var debt = ins.sleep_debt_hours;
+    set('ring-sleep-title', debt === null ? 'No sleep logged'
+      : debt >= 0 ? 'Sleep on target'
+      : debt > -7 ? 'Slightly short on sleep'
+      : 'Carrying a sleep debt');
+    set('ring-sleep-sub', debt === null
       ? 'Nothing logged yet'
-      : (ins.sleep_debt_hours < 0
-          ? VH.fmt.hours(Math.abs(ins.sleep_debt_hours)) + ' behind over ' + ins.window_days + ' days'
-          : VH.fmt.hours(ins.sleep_debt_hours) + ' ahead of the 8h goal'));
+      : (debt < 0
+          ? VH.fmt.hours(Math.abs(debt)) + ' behind over ' + ins.window_days + ' days'
+          : VH.fmt.hours(debt) + ' ahead of the 8h goal'));
 
     var week = dueThisWeek();
     set('ring-work-title', state.tasks.length > 8 ? 'Heavy workload'
@@ -178,7 +180,7 @@
     set('tile-debt-note', 'over ' + ins.window_days + 'd');
 
     set('tile-load-value', String(state.tasks.length));
-    set('tile-load-note', dueThisWeek().length + ' due this week');
+    set('tile-load-note', 'open, ' + dueThisWeek().length + ' due this week');
 
     var bed = bedtimeTarget();
     set('tile-bed-value', bed ? VH.fmt.clock(VH.fmt.stamp(bed)) : '--');
