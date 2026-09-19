@@ -10,7 +10,8 @@
 
   var TIMER_KEY = 'vinhack.session';   // the study session left running
   var WINDDOWN_KEY = 'vinhack.winddown';
-  var SLEEP_GOAL_MIN = 480;            // eight hours
+  /* Overwritten from /insights with the student's own target. */
+  var SLEEP_GOAL_MIN = 480;
 
   var ctx = null;
   var state = { tasks: [], sleep: [], screen: [], dash: null, filter: 'all' };
@@ -30,6 +31,8 @@
     if (score >= 45) return labels[2];
     return labels[3];
   }
+
+  function goalLabel() { return VH.fmt.hours(SLEEP_GOAL_MIN / 60); }
 
   function greeting() {
     var h = new Date().getHours();
@@ -71,7 +74,7 @@
       ? 'No sleep logged'
       : 'Sleep ' + VH.fmt.hours(avgSleep / 60) + ' avg (' +
         (avgSleep >= SLEEP_GOAL_MIN ? '+' : '−') +
-        VH.fmt.hours(Math.abs(avgSleep - SLEEP_GOAL_MIN) / 60) + ' vs 8h)');
+        VH.fmt.hours(Math.abs(avgSleep - SLEEP_GOAL_MIN) / 60) + ' vs ' + goalLabel() + ')');
 
     var today = todayMetric();
     set('orbit-focus', today && today.study_hours_completed
@@ -92,7 +95,7 @@
       ? 'Nothing logged yet'
       : (debt < 0
           ? VH.fmt.hours(Math.abs(debt)) + ' behind over ' + ins.window_days + ' days'
-          : VH.fmt.hours(debt) + ' ahead of the 8h goal'));
+          : VH.fmt.hours(debt) + ' ahead of the ' + goalLabel() + ' goal'));
 
     var week = dueThisWeek();
     set('ring-work-title', state.tasks.length > 8 ? 'Heavy workload'
@@ -158,7 +161,8 @@
     }
     if (ins.sleep_debt_hours !== null && ins.sleep_debt_hours < -2) {
       lines.push('You are ' + VH.fmt.hours(Math.abs(ins.sleep_debt_hours)) +
-        ' short of eight hours a night across the last ' + ins.window_days + ' days.');
+        ' short of your ' + goalLabel() + ' target across the last ' +
+        ins.window_days + ' days.');
     } else if (ins.averages.avg_sleep_minutes) {
       lines.push('Sleep is averaging ' + VH.fmt.hours(ins.averages.avg_sleep_minutes / 60) + ' a night.');
     }
@@ -184,7 +188,7 @@
 
     var bed = bedtimeTarget();
     set('tile-bed-value', bed ? VH.fmt.clock(VH.fmt.stamp(bed)) : '--');
-    set('tile-bed-note', bed ? 'for 8h' : 'log a night first');
+    set('tile-bed-note', bed ? 'for ' + goalLabel() : 'log a night first');
   }
 
   /* ------------------------------------------------------------------
@@ -327,7 +331,7 @@
     var avg = ins.averages.avg_sleep_minutes;
     set('sleep-avg', avg ? VH.fmt.hours(avg / 60) : '--');
     set('sleep-goal', avg
-      ? 'Goal 8.0h (' + (avg >= SLEEP_GOAL_MIN ? '+' : '−') +
+      ? 'Goal ' + goalLabel() + ' (' + (avg >= SLEEP_GOAL_MIN ? '+' : '−') +
         VH.fmt.hours(Math.abs(avg - SLEEP_GOAL_MIN) / 60) + ' avg)'
       : 'No nights logged yet');
 
@@ -371,7 +375,8 @@
     var bed = bedtimeTarget();
     html('sleep-bedtime', bed
       ? 'Lights out by <strong class="text-on-surface font-semibold">' +
-        VH.fmt.clock(VH.fmt.stamp(bed)) + '</strong> to clear 8h before your usual wake time'
+        VH.fmt.clock(VH.fmt.stamp(bed)) + '</strong> to clear ' + goalLabel() +
+        ' before your usual wake time'
       : 'Log a night with a bedtime and wake time to get a target.');
   }
 
@@ -461,7 +466,7 @@
     var tips = [];
     if (bed) {
       tips.push(['Aim for lights out at ' + VH.fmt.clock(VH.fmt.stamp(bed)),
-                 'That clears eight hours before the time you normally wake.']);
+                 'That clears ' + goalLabel() + ' before the time you normally wake.']);
     }
     var late = (ins.focus_by_part_of_day || []).filter(function (p) {
       return p.part_of_day === 'late night';
@@ -508,7 +513,7 @@
     var bed = bedtimeTarget();
     if (bed) {
       rows.push({ time: VH.fmt.clock(VH.fmt.stamp(bed)), title: 'Lights out',
-                  note: 'Eight hours before your usual wake time', tag: 'target' });
+                  note: goalLabel() + ' before your usual wake time', tag: 'target' });
     }
 
     set('action-plan-title', firstName(ctx.student.name) + '’s day');
@@ -645,9 +650,22 @@
     await reload();
   }
 
+  /* Refill from whatever is in state now. Reusing the node is fine; reusing
+   * the values it was built with is what made saving look like a no-op. */
+  function fillScreenTimeForm(wrap) {
+    var row = state.screen[0];
+    var current = row && row.date === ctx.insights.today ? row : {};
+    SCREEN_PARTS.forEach(function (part) {
+      var input = wrap.querySelector('[name="' + part.key + '"]');
+      if (input) input.value = current[part.key] || 0;
+    });
+    var when = wrap.querySelector('[data-screen-day]');
+    if (when) when.textContent = VH.fmt.longDate(ctx.insights.today);
+  }
+
   function screenTimeModal() {
     var existing = document.getElementById('vh-screen-time');
-    if (existing) return existing;
+    if (existing) { fillScreenTimeForm(existing); return existing; }
     var row = state.screen[0];
     var today = ctx.insights.today;
     var current = row && row.date === today ? row : {};
@@ -671,7 +689,8 @@
       '<button type="button" data-close="1" class="text-on-surface-variant hover:text-on-surface">' +
       '<span class="material-symbols-outlined">close</span></button></div>' +
       '<p class="font-body-sm text-body-sm text-on-surface-variant">Minutes for ' +
-      VH.fmt.esc(VH.fmt.longDate(today)) + '. Re-submitting replaces the day.</p>' +
+      '<span data-screen-day>' + VH.fmt.esc(VH.fmt.longDate(today)) +
+      '</span>. Re-submitting replaces the day.</p>' +
       '<div class="grid grid-cols-2 gap-space-sm">' + fields + '</div>' +
       '<div class="flex justify-end gap-space-sm pt-space-xs">' +
       '<button type="button" data-close="1" class="px-space-md py-space-xs rounded-lg ' +
@@ -759,6 +778,7 @@
     state.tasks = results[3];
     ctx.insights = results[4];
     VH.shell.insights = results[4];
+    SLEEP_GOAL_MIN = (ctx.insights.goals && ctx.insights.goals.sleep_goal_minutes) || 480;
 
     /* Hours logged per task, for the progress bar on each card. */
     state.effortByTask = {};
@@ -775,7 +795,30 @@
     renderScreen();
     renderDrawer();
     renderActionPlan();
+    renderActionTiles();
     renderPalette('');
+  }
+
+  /* The three tiles under the copilot summary. These read state that any
+   * write can change, so they belong in the render pass, not in boot(). */
+  function renderActionTiles() {
+    set('act-block-when', VH.fmt.clock(VH.fmt.stamp(nextFreeHour())) + ' for 50 minutes');
+
+    var row = state.screen[0];
+    var loggedToday = row && row.date === ctx.insights.today;
+    set('shield-status-text', loggedToday
+      ? VH.fmt.hm(row.total_screen_minutes) + ' logged today'
+      : 'Nothing logged for today');
+    var button = $('btn-screen-time');
+    if (button) button.textContent = loggedToday ? 'Edit' : 'Add';
+
+    var next = nextDeadline();
+    set('defer-history-desc', next
+      ? next.task_name + ' · ' + VH.fmt.until(next.due_date)
+      : 'Nothing has a due date');
+    var defer = $('btn-defer-history');
+    if (defer) defer.disabled = !next;
+    if (defer) defer.classList.toggle('opacity-40', !next);
   }
 
   /* ------------------------------------------------------------------
@@ -840,6 +883,17 @@
     on('export-calendar-btn', function () { window.location.href = 'schedule.html'; });
 
     on('open-breathing-btn', VH.shell.openBreathing);
+    /* The export left its own breathing modal in the page with dead controls.
+     * The shell owns breathing now, so these hand over to it. */
+    on('breathing-toggle-btn', function () {
+      modal('breathing-modal', false);
+      VH.shell.openBreathing();
+    });
+    on('breathing-reset-btn', function () {
+      modal('breathing-modal', false);
+      VH.shell.openBreathing();
+    });
+    on('profile-actions-btn', function () { window.location.href = 'profile.html'; });
     on('start-inline-breathing', VH.shell.openBreathing);
     on('modal-close-breathing', function () { modal('breathing-modal', false); });
     on('close-breathing-backdrop', function () { modal('breathing-modal', false); });
@@ -986,15 +1040,6 @@
     if (!ctx) return;
     wire();
     await reload();
-    set('act-block-when', VH.fmt.clock(VH.fmt.stamp(nextFreeHour())) + ' for 50 minutes');
-    var row = state.screen[0];
-    set('shield-status-text', row && row.date === ctx.insights.today
-      ? VH.fmt.hm(row.total_screen_minutes) + ' logged today'
-      : 'Nothing logged for today');
-    var next = nextDeadline();
-    set('defer-history-desc', next
-      ? next.task_name + ' · ' + VH.fmt.until(next.due_date)
-      : 'Nothing has a due date');
     paintTimer();
     await restoreTimer();
   }

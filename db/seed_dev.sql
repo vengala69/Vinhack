@@ -19,10 +19,13 @@ DELETE FROM students;
 DELETE FROM sqlite_sequence;
 
 -- ---------------------------------------------------------------------
-INSERT INTO students (name, email, semester) VALUES
-    ('Aarav Mehta', 'aarav@example.edu', 4),
-    ('Priya Nair',  'priya@example.edu', 6),
-    ('Rohan Verma', 'rohan@example.edu', 2);
+-- Three targets rather than one, so the sleep goal is visibly a setting and
+-- not a constant: Priya is scored against 7h and Rohan against 8h30.
+INSERT INTO students (name, email, semester, programme, registration_no,
+                      sleep_goal_minutes, daily_study_goal_hours) VALUES
+    ('Aarav Mehta', 'aarav@example.edu', 4, 'B.Tech Computer Science',  '22BCE1041', 480, 4.0),
+    ('Priya Nair',  'priya@example.edu', 6, 'B.Tech Information Tech.', '21BIT2270', 420, 5.0),
+    ('Rohan Verma', 'rohan@example.edu', 2, 'B.Tech Electronics',       '24BEC0915', 510, 3.0);
 
 -- The 14-day window the seed covers, ending today.
 CREATE TEMP TABLE seed_days AS

@@ -386,6 +386,9 @@
       location: (data.get('location') || '').trim() || null
     });
     closeAddBlock();
+    /* Follow the block to the week it landed in, so adding one for next
+     * Tuesday does not look like nothing happened. */
+    state.weekStart = mondayOf(start);
     VH.toast('Block added on ' + VH.fmt.longDate(VH.fmt.stamp(start)) + '.');
     await reload();
   }
@@ -530,6 +533,17 @@
         reload().catch(function (err) { VH.fail(err, 'Schedule'); });
       });
     }
+
+    /* "View Settings" had no handler. The settings it implies are the
+     * interface preferences, so it goes there. */
+    Array.prototype.forEach.call(document.querySelectorAll('button'), function (btn) {
+      if (/View Settings/i.test(btn.textContent)) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          window.location.href = 'settings.html';
+        });
+      }
+    });
 
     var add = $('sched-add');
     if (add) add.addEventListener('click', function (e) { e.preventDefault(); openAddBlock(null); });

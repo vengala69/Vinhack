@@ -64,16 +64,31 @@ Score10 = Field(None, ge=1, le=10)
 Score5 = Field(None, ge=1, le=5)
 
 
+# The targets the app scores against. Bounds match the CHECK constraints in
+# schema.sql, and are the only enforcement on a migrated database, where
+# ALTER TABLE could not carry the CHECK across.
+SleepGoal = Field(480, ge=240, le=720)
+StudyGoal = Field(4.0, ge=0, le=16)
+
+
 class StudentIn(BaseModel):
     name: str = Field(min_length=1)
     email: EmailStr
     semester: Optional[int] = Field(None, ge=1, le=12)
+    programme: Optional[str] = Field(None, max_length=120)
+    registration_no: Optional[str] = Field(None, max_length=40)
+    sleep_goal_minutes: int = SleepGoal
+    daily_study_goal_hours: float = StudyGoal
 
 
 class StudentUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1)
     email: Optional[EmailStr] = None
     semester: Optional[int] = Field(None, ge=1, le=12)
+    programme: Optional[str] = Field(None, max_length=120)
+    registration_no: Optional[str] = Field(None, max_length=40)
+    sleep_goal_minutes: Optional[int] = Field(None, ge=240, le=720)
+    daily_study_goal_hours: Optional[float] = Field(None, ge=0, le=16)
 
 
 class SleepLogIn(BaseModel):

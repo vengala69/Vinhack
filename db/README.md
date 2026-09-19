@@ -49,7 +49,7 @@ that skips this will silently ignore every cascade in the schema.
 
 | Table | Grain | Notes |
 |---|---|---|
-| `students` | one row per student | `email` is unique |
+| `students` | one row per student | `email` is unique; carries the sleep and study targets the app scores against |
 | `sleep_logs` | student × night | `duration_minutes` auto-derived from bedtime/wake_time |
 | `screen_time` | student × day | `total_screen_minutes` is a generated column — never insert it |
 | `academic_tasks` | one row per task | `completed_at` follows `status` automatically |
@@ -121,6 +121,14 @@ comes out null.
 Every `CREATE` in `schema.sql` is `IF NOT EXISTS`, so the file is safe to
 re-run. The API runs it on startup, which means a database built by an earlier
 version picks up new tables without a migration step.
+
+New *columns* are the exception: `CREATE TABLE IF NOT EXISTS` cannot add one to
+a table that already exists. Anything introduced after the first release is
+listed in `LATER_COLUMNS` in [`vinhack/db.py`](../vinhack/db.py), and
+`add_missing_columns()` runs on startup — it reads `PRAGMA table_info` and adds
+only what is missing, so it is safe on every boot and needs no reset. SQLite
+cannot attach a `CHECK` to an added column, so the bounds on the goal columns
+are enforced by the API's own validation on a migrated database.
 
 The API in [`vinhack/`](../vinhack) is the intended way in; see the
 [root README](../README.md).

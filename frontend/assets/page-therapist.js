@@ -200,28 +200,22 @@
     }
   }
 
-  /* ------------------------------------------------------------------
-   * Audio
-   * ---------------------------------------------------------------- */
-
-  function setTrack(playing, label, index) {
-    var bar = $('audioPlayerStatus');
-    var text = $('nowPlayingText');
-    var icons = document.querySelectorAll('.play-icon');
-    Array.prototype.forEach.call(icons, function (icon) { icon.textContent = 'play_arrow'; });
-
-    if (!playing) {
-      if (bar) bar.classList.add('hidden');
-      return;
-    }
-    if (bar) bar.classList.remove('hidden');
-    if (text) text.textContent = 'Playing: ' + label + ' — best on headphones';
-    if (index !== undefined && icons[index]) icons[index].textContent = 'pause';
+  /* A rest block is something this app can actually do: write it to the
+   * calendar, where it counts against available study hours like anything
+   * else that takes up the day. */
+  async function bookRest() {
+    var start = new Date();
+    start.setMinutes(start.getMinutes() + 5, 0, 0);
+    await VH.api.createEvent(ctx.student.student_id, {
+      event_name: 'Rest',
+      event_type: 'personal',
+      start_time: VH.fmt.stamp(start),
+      end_time: VH.fmt.stamp(new Date(start.getTime() + 15 * 60000)),
+      is_fixed: false,
+      location: 'Away from the desk'
+    });
+    VH.toast('15 minutes blocked from ' + VH.fmt.clock(VH.fmt.stamp(start)) + '.');
   }
-
-  /* ------------------------------------------------------------------
-   * Wiring
-   * ---------------------------------------------------------------- */
 
   function wire() {
     /* The protocol tabs and their panels. */
@@ -301,40 +295,14 @@
           e.preventDefault();
           VH.toast('These are summaries, not linked articles in this build.', 'info');
         });
-      } else if (/Launch NSDR Audio/i.test(label)) {
+      } else if (/Set a 15-minute rest block/i.test(label)) {
         btn.addEventListener('click', function (e) {
           e.preventDefault();
-          setTrack(VH.audio.play('nsdr'), 'Non-sleep deep rest bed');
+          bookRest().catch(function (err) { VH.fail(err, 'Rest block'); });
         });
       }
     });
 
-    /* The four tiles, in the order they appear in the markup. */
-    var TRACKS = [
-      { key: 'alpha', label: 'Alpha binaural, 10Hz' },
-      { key: 'theta432', label: '432Hz carrier, 6Hz beat' },
-      { key: 'vagus', label: 'Low 110Hz hum' },
-      { key: 'rain', label: 'Rain-like filtered noise' }
-    ];
-    Array.prototype.forEach.call(document.querySelectorAll('.play-icon'), function (icon, index) {
-      var btn = icon.closest('button');
-      var track = TRACKS[index];
-      if (!btn || !track) return;
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        setTrack(VH.audio.play(track.key), track.label, index);
-      });
-    });
-
-    var stop = $('audioPlayerStatus')
-      ? $('audioPlayerStatus').querySelector('button') : null;
-    if (stop) {
-      stop.addEventListener('click', function (e) {
-        e.preventDefault();
-        VH.audio.stop();
-        setTrack(null);
-      });
-    }
   }
 
   function paintMode() {

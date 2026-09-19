@@ -1,0 +1,8 @@
+{
+  "name": "vinhack-tests",
+  "private": true,
+  "description": "End-to-end checks for the write paths. Run: npm install, then node roundtrips.mjs",
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}

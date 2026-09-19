@@ -46,7 +46,8 @@ fortnight of history each.
 | `scores.html` | `/grades`, `/assessments` | assessments |
 | `analytics.html` | `/insights`, `/grades` | — |
 | `therapist.html` | mood, sleep, tasks, `/insights`, `/wellbeing/status` | — (the chat is not stored) |
-| `settings.html` | `/students/{id}`, `/students`, `/health` | the student record; which student is being viewed (browser only) |
+| `profile.html` | `/students/{id}/profile` | the student record and their targets |
+| `settings.html` | `/students/{id}`, `/students`, `/health` | interface preferences; which student is being viewed (browser only) |
 
 Two conventions worth knowing before editing a page:
 
@@ -109,10 +110,63 @@ it is gone when the tab closes.
 
 ### Sound
 
-The soundscapes on Focus Mode and the Therapist screen are synthesised in the
-browser with the Web Audio API &mdash; binaural beats from paired oscillators,
-rain and room tone from filtered noise. Nothing is downloaded and nothing is
-licensed. The binaural tracks only work on headphones, which the player says.
+Every sound in the app is synthesised in the browser with the Web Audio API.
+Nothing is downloaded, nothing is licensed, and it works offline.
+
+**Soundscapes** on Focus Mode (loops, one at a time &mdash; clicking the
+playing one stops it):
+
+| Track | How it is made |
+|---|---|
+| Binaural 6Hz | two oscillators 6Hz apart, panned hard L/R |
+| Brown noise | white noise integrated, for room tone |
+| Rain | band-passed white noise with a slow tremolo |
+
+The Therapist screen's "frequency regulation" panel was removed. Each of its
+four tiles attached a physiological claim to an oscillator &mdash; a cortisol
+flush, a vagus nerve reset, striatal dopamine &mdash; and while the tones
+played, the claims were the part that could not be made true. NSDR was the
+clearest case: it is a guided voice protocol, and low-passed noise is not a
+quiet version of one, it is a different thing wearing its name.
+
+**Cues** (one-shots, scheduled so they sound over a playing loop and are never
+clipped when it stops): the focus timer reaching zero, a session starting and
+stopping, and one soft tone per phase of every breathing pacer &mdash; a pacer
+you follow with your eyes shut needs something to hear.
+
+Binaural beats only work on headphones; the player says so rather than leaving
+people wondering. **Settings &rarr; Sound** turns all of it off, and the
+preference is remembered per browser.
+
+No audio *files* ship deliberately. Sourcing recordings would mean either
+committing megabytes of media into a repo that already carries an 18MB SVG, or
+tracking down licences for each clip &mdash; and a synthesised binaural beat is
+not an inferior version of a recorded one, it is how they are made. If you do
+want real recordings (a genuine rain field recording sounds better than
+filtered noise), drop CC0 files into `frontend/assets/audio/` and swap the
+matching entry in `TRACKS` for an `<audio>` element; the rest of the API stays
+the same.
+
+### Targets, and the profile page
+
+`profile.html` holds the student's record &mdash; name, email, semester,
+programme, registration number &mdash; along with the two targets the app
+scores them against, a count of everything they have logged, and a button that
+clears that data without deleting the profile. It is reached by clicking the
+profile strip at the bottom of the sidebar, on any page.
+
+The sleep target is the reason the page exists. Eight hours was hard-coded in
+six places and inside the sleep score; a student on night shifts and one with
+9am lectures should not be measured against the same number. It is now a column
+on `students`, it drives the sleep card, the debt figure, the bedtime
+suggestion and the sleep half of the overall index, and the three seeded
+students deliberately have three different targets so you can see it working.
+
+Columns added after the first release cannot be introduced by
+`CREATE TABLE IF NOT EXISTS`, so `vinhack/db.py` keeps a `LATER_COLUMNS` list
+and `add_missing_columns()` runs on startup: it reads what is actually in the
+table and adds only the gap. An existing `vinhack.db` picks up the new fields
+on the next boot, with no reset and no data loss.
 
 ## API
 
@@ -186,6 +240,26 @@ List endpoints accept `?from=` and `?to=` dates and a `?limit=`.
 - **`daily_metrics` refreshes itself.** Any write that feeds the rollup triggers
   it before responding, so the dashboard is never a step behind. `POST
   /api/rollup` is still there for bulk imports.
+
+## Tests
+
+`tests/roundtrips.mjs` drives nine write paths through the real pages and
+checks that the widgets reading that data actually moved — not that the POST
+returned 201, which was never the failing part.
+
+```
+cd tests && npm install         # jsdom, dev-only, not vendored
+py db/setup.py --reset --seed
+py -m uvicorn vinhack.main:app --port 8010
+node tests/roundtrips.mjs                # all nine
+node tests/roundtrips.mjs quick-task     # one by name
+```
+
+It covers quick task, completing a task, starting and stopping a focus
+session, logging sleep, a mood check-in, logging a score, adding a study
+block, and changing the sleep goal on the profile and seeing it reach the
+sleep page and the dashboard. **It writes to whatever database the API is
+pointed at**, so run it against a seeded dev copy.
 
 ### Status codes
 

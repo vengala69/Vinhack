@@ -128,6 +128,34 @@
       (prefs.accent === 'emerald' ? ' (default)' : ''));
   }
 
+  function paintSound() {
+    var btn = $('sound-toggle');
+    var icon = $('sound-icon');
+    if (!btn) return;
+    var off = VH.audio.muted();
+    btn.textContent = off ? 'Turn on' : 'Turn off';
+    btn.className = 'px-space-md py-space-xs rounded-lg font-label-md text-label-md ' +
+      'font-semibold transition-colors flex-shrink-0 ' +
+      (off ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface');
+    if (icon) {
+      icon.textContent = off ? 'volume_off' : 'volume_up';
+      icon.className = 'material-symbols-outlined text-[20px] flex-shrink-0 ' +
+        (off ? 'text-on-surface-variant' : 'text-primary');
+    }
+  }
+
+  function wireSound() {
+    var btn = $('sound-toggle');
+    if (!btn) return;
+    paintSound();
+    btn.addEventListener('click', function () {
+      var nowMuted = VH.audio.setMuted(!VH.audio.muted());
+      paintSound();
+      if (!nowMuted) VH.audio.cue('start');   /* prove it is back on */
+      VH.toast(nowMuted ? 'Sound off.' : 'Sound on.', 'info');
+    });
+  }
+
   function wirePrefs() {
     var slider = $('fontScaleSlider');
     if (slider) {
@@ -333,6 +361,7 @@
     if (!ctx) return;
     paintPrefs();
     wirePrefs();
+    wireSound();
     fillProfile();
     await renderSwitcher();
 

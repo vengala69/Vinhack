@@ -9,8 +9,18 @@
 (function (VH) {
   'use strict';
 
-  var GOAL_MIN = 480;          // eight hours
-  var PLOT_MAX_MIN = 600;      // the chart tops out at ten hours
+  /* The student's own target, read from /insights on every load. Eight hours
+   * is only the default; the profile page can move it. */
+  var GOAL_MIN = 480;
+  var PLOT_MAX_MIN = 600;      // the chart tops out 25% above the target
+
+  function applyGoal(insights) {
+    GOAL_MIN = (insights.goals && insights.goals.sleep_goal_minutes) || 480;
+    PLOT_MAX_MIN = Math.round(GOAL_MIN * 1.25);
+    var label = VH.fmt.hours(GOAL_MIN / 60);
+    set('sleep-goal-label', label + ' target');
+    set('sleep-goal-legend', label);
+  }
 
   var ctx = null;
   var state = { sleep: [], mood: [], screen: [], events: [], tasks: [], draft: {} };
@@ -57,7 +67,7 @@
     var minutes = last ? last.duration_minutes : null;
 
     set('kpi-duration-value', minutes ? VH.fmt.hours(minutes / 60) : '--');
-    set('kpi-duration-unit', '/ 8.0h goal');
+    set('kpi-duration-unit', '/ ' + VH.fmt.hours(GOAL_MIN / 60) + ' goal');
     width('kpi-duration-bar', minutes ? minutes / GOAL_MIN * 100 : 0);
     set('kpi-duration-tag', minutes
       ? (minutes >= GOAL_MIN ? '+' : '−') + VH.fmt.hours(Math.abs(minutes - GOAL_MIN) / 60)
@@ -126,7 +136,7 @@
   function renderChart() {
     var nights = state.sleep.slice(0, 7).reverse();
     set('sleep-chart-sub', nights.length
-      ? 'Time in bed each night against the 8-hour mark'
+      ? 'Time in bed each night against your ' + VH.fmt.hours(GOAL_MIN / 60) + ' target'
       : 'No nights logged yet — use “Log last night”.');
     html('sleep-chart', nights.length
       ? nights.map(function (night) {
@@ -195,13 +205,13 @@
         : debt < 0 ? 'Sleep debt: ' + VH.fmt.hours(Math.abs(debt))
         : 'Sleep surplus: ' + VH.fmt.hours(debt),
       debt === null ? 'Nothing logged in the window.'
-        : 'Against 8h a night over the ' + (ctx.insights.averages.days_logged || 0) +
-          ' days you logged.'));
+        : 'Against ' + VH.fmt.hours(GOAL_MIN / 60) + ' a night over the ' +
+          (ctx.insights.averages.days_logged || 0) + ' days you logged.'));
 
     var target = targetBedtime();
     cards.push(driftCard('wb_twilight', 'primary',
       target ? 'Target bedtime: ' + VH.fmt.clock(VH.fmt.stamp(target)) : 'Target bedtime: --',
-      target ? 'Eight hours before your average wake time this week.'
+      target ? VH.fmt.hours(GOAL_MIN / 60) + ' before your average wake time this week.'
              : 'Log a wake time and this fills in.'));
 
     html('sleep-drift', cards.join(''));
@@ -265,9 +275,9 @@
       factors.push({ pct: debtPct, row: loadRow('battery_charging_20', 'Accumulated sleep debt',
         debt >= 0 ? 'none' : VH.fmt.hours(Math.abs(debt)), debtPct,
         debtPct > 50 ? 'error' : 'primary',
-        debt >= 0 ? 'You are at or above the 8h goal on average.'
+        debt >= 0 ? 'You are at or above your ' + VH.fmt.hours(GOAL_MIN / 60) + ' target on average.'
           : 'Averaging ' + VH.fmt.hours(ctx.insights.averages.avg_sleep_minutes / 60) +
-            ' against an 8h goal.') });
+            ' against a ' + VH.fmt.hours(GOAL_MIN / 60) + ' goal.') });
     }
 
     factors.sort(function (a, b) { return b.pct - a.pct; });
@@ -556,7 +566,8 @@
       '',
       'Nights logged in the last ' + ins.window_days + ' days: ' + (ins.averages.days_logged || 0),
       'Average time in bed: ' + (ins.averages.avg_sleep_minutes
-        ? VH.fmt.hours(ins.averages.avg_sleep_minutes / 60) : 'no data') + ' (goal 8.0h)',
+        ? VH.fmt.hours(ins.averages.avg_sleep_minutes / 60) : 'no data') +
+        ' (target ' + VH.fmt.hours(GOAL_MIN / 60) + ')',
       'Average self-rated quality: ' + VH.fmt.num(ins.averages.avg_sleep_quality, 1, 'not rated') + '/5',
       'Running balance against the goal: ' + (ins.sleep_debt_hours === null ? 'no data'
         : (ins.sleep_debt_hours >= 0 ? '+' : '−') + VH.fmt.hours(Math.abs(ins.sleep_debt_hours))),
@@ -607,6 +618,7 @@
     state.tasks = results[4];
     ctx.insights = results[5];
     VH.shell.insights = results[5];
+    applyGoal(ctx.insights);
 
     var todaysMood = state.mood.filter(function (m) { return m.date === ctx.insights.today; })[0];
     state.draft = {
@@ -732,12 +744,12 @@
       });
     }
 
-    var dismiss = document.querySelector('[data-dismiss-toast]');
+    /* The export's inline handler was stripped with its script; find the
+     * button by where it sits rather than by an attribute that is gone. */
+    var toastEl = $('statusToast');
+    var dismiss = toastEl ? toastEl.querySelector('button') : null;
     if (dismiss) {
-      dismiss.addEventListener('click', function () {
-        var toast = $('statusToast');
-        if (toast) toast.classList.add('hidden');
-      });
+      dismiss.addEventListener('click', function () { toastEl.classList.add('hidden'); });
     }
 
     document.addEventListener('keydown', function (e) {

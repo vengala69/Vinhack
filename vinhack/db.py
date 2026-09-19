@@ -73,3 +73,43 @@ def update(conn: sqlite3.Connection, table: str, data: dict[str, Any],
                      [*data.values(), pk_value])
         conn.commit()
     return one(conn.execute(f"SELECT * FROM {table} WHERE {pk} = ?", (pk_value,)))
+
+
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS cannot add
+# a column to a table that already exists, so anything introduced later has to
+# be listed here as well as in schema.sql.
+LATER_COLUMNS = {
+    "students": [
+        ("programme", "TEXT"),
+        ("registration_no", "TEXT"),
+        ("sleep_goal_minutes", "INTEGER NOT NULL DEFAULT 480"),
+        ("daily_study_goal_hours", "REAL NOT NULL DEFAULT 4.0"),
+    ],
+}
+
+
+def add_missing_columns(conn: sqlite3.Connection) -> list[str]:
+    """Bring an existing database up to the current column list.
+
+    Idempotent: it reads what is actually there and adds only the gap, so it
+    is safe to run on every startup. Returns what it added, for logging.
+
+    SQLite's ALTER TABLE ADD COLUMN cannot add a CHECK constraint, so the
+    bounds on the goal columns live in schema.sql for fresh databases and are
+    enforced by the API's own validation for migrated ones.
+    """
+    added = []
+    for table, columns in LATER_COLUMNS.items():
+        if not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone():
+            continue
+        have = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns:
+            if name in have:
+                continue
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+            added.append(f"{table}.{name}")
+    if added:
+        conn.commit()
+    return added
