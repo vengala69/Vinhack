@@ -1,0 +1,322 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SIGMA GPT - Data Alchemy 4.0</title>
+<style>
+  :root{--navy:#05070f;--cyan:#3fd0e6;--gold:#f5c542;--text:#eaf0ff;--muted:#9fb0d6;
+        --line:rgba(120,170,255,.14);--panel:rgba(255,255,255,.04);}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(160deg,var(--navy),#0b1130);color:var(--text);
+       font-family:-apple-system,Segoe UI,Inter,sans-serif;padding:32px 16px;min-height:100vh}
+  .wrap{max-width:780px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.04em;
+         text-transform:uppercase;font-size:12px;color:var(--cyan);margin-bottom:22px}
+  h1{font-size:30px;margin:0 0 4px;background:linear-gradient(100deg,#fff,var(--cyan));
+     -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:18px}
+  .label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);font-weight:700;margin-bottom:8px}
+  input[type=text],input[type=password]{width:100%;padding:11px 13px;border-radius:9px;
+      border:1px solid var(--line);background:rgba(0,0,0,.3);color:var(--text);font-size:14px;outline:none;
+      transition:border-color .15s,box-shadow .15s}
+  input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(63,208,230,.15)}
+  button{background:var(--cyan);color:#04202a;border:0;border-radius:9px;padding:11px 18px;
+         font-weight:700;font-size:14px;cursor:pointer;transition:transform .1s,filter .15s}
+  button:hover{filter:brightness(1.08)}
+  button:active{transform:scale(.97)}
+  button:disabled{opacity:.5;cursor:default;transform:none}
+  .ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:600;padding:7px 12px;font-size:12px}
+  .ghost:hover{color:var(--text);border-color:rgba(255,255,255,.3)}
+  .fine{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0 0}
+
+  .stats{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 13px;
+        font-size:11px;color:var(--muted);display:flex;gap:5px;align-items:center;white-space:nowrap}
+  .stat b{color:var(--gold);font-weight:700}
+
+  .chatpanel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+             padding:16px 10px 16px 16px;margin-bottom:14px}
+  #chat{height:min(58vh,460px);min-height:300px;overflow-y:auto;padding-right:8px;
+        scrollbar-width:thin;scrollbar-color:rgba(63,208,230,.4) transparent}
+  #chat::-webkit-scrollbar{width:7px}
+  #chat::-webkit-scrollbar-track{background:transparent}
+  #chat::-webkit-scrollbar-thumb{background:rgba(63,208,230,.35);border-radius:8px}
+  #chat::-webkit-scrollbar-thumb:hover{background:rgba(63,208,230,.6)}
+  .msg{display:flex;gap:10px;margin-bottom:16px;align-items:flex-start}
+  .msg.me{flex-direction:row-reverse}
+  .avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+          font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px}
+  .me .avatar{background:rgba(245,197,66,.18);color:var(--gold);border:1px solid rgba(245,197,66,.35)}
+  .bot .avatar{background:rgba(63,208,230,.18);color:var(--cyan);border:1px solid rgba(63,208,230,.35)}
+  .msgbody{max-width:82%;display:flex;flex-direction:column}
+  .me .msgbody{align-items:flex-end}
+  .who{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-bottom:5px;color:var(--muted)}
+  .bubble{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 15px;
+          white-space:pre-wrap;line-height:1.55;font-size:15px;animation:fadein .25s ease both}
+  .bot .bubble{background:linear-gradient(160deg,rgba(63,208,230,.10),rgba(63,208,230,.02));border-color:rgba(63,208,230,.3)}
+  .me .bubble{background:rgba(245,197,66,.08);border-color:rgba(245,197,66,.25)}
+  @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+  .step{font-family:'SF Mono',Menlo,monospace;font-size:12px;color:var(--muted);
+        border-left:2px solid rgba(245,197,66,.5);padding:6px 0 6px 11px;margin:7px 0;
+        white-space:pre-wrap;animation:slidein .3s ease both}
+  @keyframes slidein{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+  .step b{color:var(--gold);font-weight:700}
+  .thinking{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;padding:4px 0}
+  .dots span{width:5px;height:5px;border-radius:50%;background:var(--cyan);display:inline-block;
+             margin-left:2px;animation:blink 1.3s infinite both}
+  .dots span:nth-child(2){animation-delay:.2s}
+  .dots span:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.15}40%{opacity:1}}
+
+  .badges{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+  .badge{font-size:11px;background:rgba(245,197,66,.12);border:1px solid rgba(245,197,66,.35);
+         color:var(--gold);border-radius:999px;padding:3px 10px;display:flex;align-items:center;gap:4px}
+
+  .composer{display:flex;gap:9px}
+  .composer input{flex:1}
+  .bar{display:flex;gap:9px;align-items:center;margin-top:13px;flex-wrap:wrap}
+  .bar span{color:var(--muted);font-size:12px;margin-left:auto}
+  .err{color:#ff9b9b;font-size:13px;margin-top:10px}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:26px}
+  .cursor{display:inline-block;width:7px;height:14px;background:var(--cyan);margin-left:2px;
+          vertical-align:middle;animation:blink2 .9s steps(2) infinite}
+  @keyframes blink2{50%{opacity:0}}
+</style></head><body><div class="wrap">
+<div class="brand"><svg width="17" height="17" viewBox="0 0 24 24"><path fill="currentColor"
+ d="M12 1c.6 6.1 4.3 9.8 11 11-6.7 1.2-10.4 4.9-11 11-.6-6.1-4.3-9.8-11-11 6.7-1.2 10.4-4.9 11-11Z"/></svg>
+ Data Alchemy 4.0</div>
+<h1>SIGMA GPT</h1>
+<p class="sub">An AI agent I built from scratch. It reasons, uses tools, and remembers.</p>
+
+<div class="card" id="keygate">
+  <div class="label">One-time setup</div>
+  <p class="fine" style="margin-top:0">Paste your Groq API key to wake your agent up. It is saved
+  only in this browser, never inside this file, so the file itself stays safe to share.</p>
+  <input id="keyinput" type="password" placeholder="gsk_..." autocomplete="off">
+  <p class="fine"><button id="savekey">Wake it up</button></p>
+  <div class="err" id="keyerr"></div>
+</div>
+
+<div id="app" hidden>
+  <div class="stats" id="stats"></div>
+  <div class="chatpanel"><div id="chat"></div></div>
+  <div class="composer">
+    <input id="msg" type="text" placeholder="Ask your agent something..." autocomplete="off">
+    <button id="send">Send</button>
+  </div>
+  <div class="bar">
+    <button class="ghost" id="clearmem">Clear memory</button>
+    <button class="ghost" id="changekey">Change key</button>
+    <button class="ghost" id="exportchat">Export chat</button>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<footer>#DataAlchemy4</footer>
+</div>
+<script>
+var AGENT_NAME="SIGMA GPT", SYSTEM_PROMPT="You are SIGMA GPT, a practical study agent. Be specific, be detailed, and never invent facts. Give entire answer in one single answer", WELCOME="Hi, I'm SIGMA. What should I help you plan?", MODEL="openai/gpt-oss-120b";
+var MAX_STEPS=5, KEY_STORE="da4_key", MEM_STORE="da4_mem_"+AGENT_NAME;
+var $=function(id){return document.getElementById(id)};
+
+// session-only counters, purely for the live stats bar during a demo
+var sessionSteps=0, sessionToolCalls=0;
+
+var TOOL_ICON={calculator:"🧮",search:"🔍",datetime:"🕐"};
+
+function getKey(){try{return localStorage.getItem(KEY_STORE)||""}catch(e){return window._k||""}}
+function setKey(v){try{localStorage.setItem(KEY_STORE,v)}catch(e){window._k=v}}
+function loadMem(){try{return JSON.parse(localStorage.getItem(MEM_STORE)||"[]")}catch(e){return[]}}
+function saveMem(line){try{var m=loadMem();m.push(line);
+  localStorage.setItem(MEM_STORE,JSON.stringify(m.slice(-20)))}catch(e){}updateStats()}
+
+function updateStats(){
+  var n=loadMem().length;
+  $("stats").innerHTML=
+    '<div class="stat">🔁 <b>'+sessionSteps+'</b>&nbsp;steps taken</div>'+
+    '<div class="stat">🛠️ <b>'+sessionToolCalls+'</b>&nbsp;tool calls</div>'+
+    '<div class="stat">🧠 <b>'+n+'</b>&nbsp;'+(n===1?"memory":"memories")+'</div>';
+}
+
+var tools={
+  calculator:function(expr){
+    if(!/^[0-9+\-*/(). %]+$/.test(expr)) return "The calculator only accepts numbers and + - * / ( ).";
+    try{var v=Function("return ("+expr+")")();return String(v)}catch(e){return "Could not calculate that."}
+  },
+  search:function(q){
+    var facts={"ceo of google":"Sundar Pichai","capital of japan":"Tokyo"};
+    return facts[q.toLowerCase().trim()]||"No result found.";
+  },
+  datetime:function(q){
+    var now=new Date();
+    return now.toLocaleString(undefined,{weekday:"long",year:"numeric",month:"long",day:"numeric",
+      hour:"2-digit",minute:"2-digit"});
+  }
+};
+
+function fullSystem(){
+  return SYSTEM_PROMPT+"\n\n"+
+    "Available tools:\n"+
+    "- calculator: does maths, e.g. \"12 * 8\"\n"+
+    "- search: looks up simple facts, e.g. \"capital of japan\"\n"+
+    "- datetime: returns the current date and time, e.g. \"now\"\n\n"+
+    "On every turn, reply with EXACTLY ONE line, in ONE of these two formats:\n"+
+    "ACTION: tool_name: input\n"+
+    "ANSWER: your final answer\n\n"+
+    "Use ACTION when you still need information or a calculation.\n"+
+    "Use ANSWER as soon as you can fully answer the goal.\n"+
+    "Never write anything outside of those two formats.";
+}
+
+async function callGroq(context){
+  var res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+getKey()},
+    body:JSON.stringify({model:MODEL,messages:[
+      {role:"system",content:fullSystem()},{role:"user",content:context}]})
+  });
+  if(res.status===401) throw new Error("That key was rejected. Click 'Change key' and paste it again.");
+  if(res.status===429) throw new Error("Rate limit reached. Wait about 20 seconds, then try again.");
+  if(!res.ok) throw new Error("Groq returned an error ("+res.status+"). Try again in a moment.");
+  var data=await res.json();
+  return (data.choices[0].message.content||"").trim();
+}
+
+function addStep(slot,step,tool,input,result){
+  var s=document.createElement("div");s.className="step";
+  var icon=TOOL_ICON[tool]||"⚙️";
+  var b=document.createElement("b");b.textContent=icon+" Step "+step+"  used "+tool;s.appendChild(b);
+  var t=document.createElement("div");t.textContent=input+"  ->  "+result;s.appendChild(t);
+  slot.appendChild(s);$("chat").scrollTop=$("chat").scrollHeight;
+}
+
+function typeWriter(el,text,done){
+  var i=0,speed=Math.max(6,Math.min(20,900/Math.max(text.length,1)));
+  var cursor=document.createElement("span");cursor.className="cursor";
+  el.textContent="";el.appendChild(cursor);
+  var iv=setInterval(function(){
+    i++;
+    el.textContent=text.slice(0,i);
+    el.appendChild(cursor);
+    $("chat").scrollTop=$("chat").scrollHeight;
+    if(i>=text.length){clearInterval(iv);cursor.remove();if(done)done();}
+  },speed);
+}
+
+async function runAgent(goal,slot,toolsUsed){
+  var context="",mem=loadMem();
+  if(mem.length) context+="What you remember from earlier:\n"+mem.join("\n")+"\n\n";
+  context+="Goal: "+goal;
+  for(var step=1;step<=MAX_STEPS;step++){
+    var reply=(await callGroq(context)).trim();
+    var first=reply.split("\n")[0].trim();
+    if(first.toUpperCase().indexOf("ANSWER:")===0){
+      var ans=first.slice(first.indexOf(":")+1).trim();
+      saveMem("Goal: "+goal+" | Answer: "+ans);
+      return ans;
+    }
+    if(first.toUpperCase().indexOf("ACTION:")===0){
+      sessionSteps++;sessionToolCalls++;updateStats();
+      var parts=first.split(":");
+      var name=(parts[1]||"").trim().toLowerCase();
+      var input=parts.slice(2).join(":").trim();
+      var result=tools[name]?tools[name](input):("There is no tool called '"+name+"'.");
+      if(tools[name] && toolsUsed.indexOf(name)===-1) toolsUsed.push(name);
+      addStep(slot,step,name,input,result);
+      context+="\n"+first+"\nResult: "+result+"\nGoal: "+goal;
+      continue;
+    }
+    saveMem("Goal: "+goal+" | Answer: "+reply);
+    return reply;
+  }
+  return "I ran out of steps ("+MAX_STEPS+") without finishing. Try asking something simpler.";
+}
+
+function addMsg(who,cls){
+  var d=document.createElement("div");d.className="msg "+cls;
+  var av=document.createElement("div");av.className="avatar";
+  av.textContent=cls==="me"?"You".slice(0,1):(who||"A").slice(0,1).toUpperCase();
+  d.appendChild(av);
+  var body=document.createElement("div");body.className="msgbody";
+  var w=document.createElement("div");w.className="who";w.textContent=who;body.appendChild(w);
+  var b=document.createElement("div");b.className="bubble";body.appendChild(b);
+  d.appendChild(body);
+  $("chat").appendChild(d);$("chat").scrollTop=$("chat").scrollHeight;return {bubble:b,body:body};
+}
+function botSlot(){
+  var d=document.createElement("div");d.className="msg bot";
+  var av=document.createElement("div");av.className="avatar";av.textContent=(AGENT_NAME||"A").slice(0,1).toUpperCase();
+  d.appendChild(av);
+  var body=document.createElement("div");body.className="msgbody";
+  var w=document.createElement("div");w.className="who";w.textContent=AGENT_NAME;body.appendChild(w);
+  d.appendChild(body);
+  $("chat").appendChild(d);return body;
+}
+
+async function send(){
+  var text=$("msg").value.trim();if(!text)return;
+  $("msg").value="";$("send").disabled=true;$("err").textContent="";
+  addMsg("You","me").bubble.textContent=text;
+  var body=botSlot();
+  var wait=document.createElement("div");wait.className="thinking";
+  wait.innerHTML="thinking<span class='dots'><span>.</span><span>.</span><span>.</span></span>";
+  body.appendChild(wait);
+  var toolsUsed=[];
+  try{
+    var ans=await runAgent(text,body,toolsUsed);
+    wait.remove();
+    var b=document.createElement("div");b.className="bubble";body.appendChild(b);
+    typeWriter(b,ans,function(){
+      if(toolsUsed.length){
+        var bd=document.createElement("div");bd.className="badges";
+        toolsUsed.forEach(function(t){
+          var chip=document.createElement("div");chip.className="badge";
+          chip.textContent=(TOOL_ICON[t]||"⚙️")+" "+t;bd.appendChild(chip);
+        });
+        body.appendChild(bd);
+      }
+      $("chat").scrollTop=$("chat").scrollHeight;
+    });
+  }catch(e){
+    wait.remove();
+    var b2=document.createElement("div");b2.className="bubble";
+    b2.textContent="Something went wrong.";body.appendChild(b2);
+    $("err").textContent=e.message;
+  }
+  $("send").disabled=false;$("msg").focus();
+}
+
+function exportChat(){
+  var lines=[];
+  document.querySelectorAll("#chat .msg").forEach(function(m){
+    var who=m.querySelector(".who").textContent;
+    var bubble=m.querySelector(".bubble");
+    if(bubble) lines.push(who+": "+bubble.textContent);
+  });
+  var blob=new Blob([lines.join("\n\n")],{type:"text/plain"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=(AGENT_NAME||"agent")+"_chat.txt";a.click();
+}
+
+function boot(){
+  if(!getKey())return;
+  $("keygate").hidden=true;$("app").hidden=false;
+  updateStats();
+  if(!$("chat").childNodes.length) addMsg(AGENT_NAME,"bot").bubble.textContent=WELCOME;
+  $("msg").focus();
+}
+$("savekey").onclick=function(){
+  var v=$("keyinput").value.trim();
+  if(!v){$("keyerr").textContent="Paste your key first.";return}
+  setKey(v);$("keyinput").value="";$("keyerr").textContent="";boot();
+};
+$("send").onclick=send;
+$("msg").addEventListener("keydown",function(e){if(e.key==="Enter")send()});
+$("keyinput").addEventListener("keydown",function(e){if(e.key==="Enter")$("savekey").click()});
+$("changekey").onclick=function(){
+  setKey("");$("app").hidden=true;$("keygate").hidden=false;$("chat").innerHTML="";
+};
+$("clearmem").onclick=function(){try{localStorage.removeItem(MEM_STORE)}catch(e){}updateStats()};
+$("exportchat").onclick=exportChat;
+boot();
+</script></body></html>
