@@ -9,8 +9,9 @@ Two things make this different from a generic chatbot wrapper:
     companion, not a counsellor, and that anything touching self-harm gets a
     short reply pointing at real help rather than a coaching conversation.
 
-If no API key is configured the endpoint reports that plainly and the frontend
-falls back to its scripted replies, so the page works either way.
+If no API key is configured the endpoint returns 503 and the page says so.
+There is no second response path: a reply on that screen either came from the
+model or is an error message saying it did not.
 """
 import os
 from typing import Any, Optional
