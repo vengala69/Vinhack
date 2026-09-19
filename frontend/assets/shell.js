@@ -301,6 +301,8 @@ window.VH = window.VH || {};
     }
     stopBreathing();
     paint();
+    /* A pacer you follow with your eyes shut needs a sound, not just a circle. */
+    VH.audio.cue('inhale');
     breathTimer = setInterval(function () {
       left -= 1;
       if (left <= 0) {
@@ -308,8 +310,14 @@ window.VH = window.VH || {};
         phase = (phase + 1) % 4;
         if (phase === 0) {
           cycles += 1;
-          if (cycles > 4) { stopBreathing(); VH.toast('Four cycles done. Nervous system reset.'); return; }
+          if (cycles > 4) {
+            stopBreathing();
+            VH.audio.cue('done');
+            VH.toast('Four cycles done.');
+            return;
+          }
         }
+        VH.audio.cue(['inhale', 'hold', 'exhale', 'hold'][phase]);
       }
       paint();
     }, 1000);

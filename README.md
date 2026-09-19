@@ -109,10 +109,38 @@ it is gone when the tab closes.
 
 ### Sound
 
-The soundscapes on Focus Mode and the Therapist screen are synthesised in the
-browser with the Web Audio API &mdash; binaural beats from paired oscillators,
-rain and room tone from filtered noise. Nothing is downloaded and nothing is
-licensed. The binaural tracks only work on headphones, which the player says.
+Every sound in the app is synthesised in the browser with the Web Audio API.
+Nothing is downloaded, nothing is licensed, and it works offline.
+
+**Soundscapes** (loops, one at a time &mdash; clicking the playing one stops it):
+
+| Track | Where | How it is made |
+|---|---|---|
+| Binaural 6Hz | Focus Mode | two oscillators 6Hz apart, panned hard L/R |
+| Brown noise | Focus Mode | white noise integrated, for room tone |
+| Rain | both | band-passed white noise with a slow tremolo |
+| Alpha 10Hz | Therapist | binaural, 10Hz beat |
+| 432Hz theta | Therapist | binaural, 432Hz carrier |
+| Vagus tone | Therapist | 110Hz sine with a slow wobble |
+| NSDR bed | Therapist | low-passed brown noise, breathing slowly |
+
+**Cues** (one-shots, scheduled so they sound over a playing loop and are never
+clipped when it stops): the focus timer reaching zero, a session starting and
+stopping, and one soft tone per phase of every breathing pacer &mdash; a pacer
+you follow with your eyes shut needs something to hear.
+
+Binaural beats only work on headphones; the player says so rather than leaving
+people wondering. **Settings &rarr; Sound** turns all of it off, and the
+preference is remembered per browser.
+
+No audio *files* ship deliberately. Sourcing recordings would mean either
+committing megabytes of media into a repo that already carries an 18MB SVG, or
+tracking down licences for each clip &mdash; and a synthesised binaural beat is
+not an inferior version of a recorded one, it is how they are made. If you do
+want real recordings (a genuine rain field recording sounds better than
+filtered noise), drop CC0 files into `frontend/assets/audio/` and swap the
+matching entry in `TRACKS` for an `<audio>` element; the rest of the API stays
+the same.
 
 ## API
 

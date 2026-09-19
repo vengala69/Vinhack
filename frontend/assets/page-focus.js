@@ -15,7 +15,7 @@
   var RING_CIRCUMFERENCE = 540;   // 2 * pi * r, with r = 86 in the SVG
 
   var ctx = null;
-  var state = { tasks: [], sessions: [], taskId: null, planned: 25 * 60 };
+  var state = { tasks: [], sessions: [], taskId: null, planned: 25 * 60, rang: false };
   var timer = { id: null, startedAt: null, tick: null };
 
   function $(id) { return document.getElementById(id); }
@@ -54,6 +54,15 @@
 
     var elapsed = (Date.now() - timer.startedAt) / 1000;
     var left = state.planned - elapsed;
+
+    /* The one moment this screen has to be audible: the whole point of a timer
+     * is not having to watch it. Once only - the session keeps running past
+     * the planned length, and a chime every second would be a punishment. */
+    if (left <= 0 && !state.rang) {
+      state.rang = true;
+      VH.audio.cue('done');
+      VH.toast('Planned time is up. Stop when you are ready — it is still running.');
+    }
     /* Past the planned length the timer keeps counting up: the session is
      * still open in the database, and hiding that would be a lie. */
     set('timer-countdown', left >= 0 ? VH.fmt.mmss(left) : '+' + VH.fmt.mmss(-left));
@@ -80,6 +89,8 @@
     timer.id = created.session_id;
     timer.startedAt = VH.fmt.parse(created.start_time).getTime();
     writeSaved({ id: timer.id, startedAt: timer.startedAt, student: ctx.student.student_id });
+    state.rang = false;
+    VH.audio.cue('start');
     startBreathing();
     runClock();
     VH.toast('Session started. It is open in the database until you stop it.');
@@ -102,8 +113,10 @@
     }
     clearInterval(timer.tick);
     stopBreathing();
+    VH.audio.cue('stop');
     timer.id = null;
     timer.startedAt = null;
+    state.rang = false;
     writeSaved(null);
     paintTimer();
     await reload();
@@ -167,9 +180,11 @@
     stopBreathing();
     breath.phase = 0;
     paintBreath(PHASES[0]);
+    VH.audio.cue('inhale');
     breath.tick = setInterval(function () {
       breath.phase = (breath.phase + 1) % PHASES.length;
       paintBreath(PHASES[breath.phase]);
+      VH.audio.cue(['inhale', 'hold', 'exhale'][breath.phase]);
     }, 4000);
   }
 
