@@ -283,61 +283,7 @@
       el.textContent = VH.fmt.initials(updated.name);
     });
     fillProfile();
-    await renderSwitcher();
     VH.toast('Record updated.');
-  }
-
-  /* ------------------------------------------------------------------
-   * Choosing which student to view
-   *
-   * Not a session: there is no login. This just decides which student_id the
-   * pages read, and it is remembered per browser.
-   * ---------------------------------------------------------------- */
-
-  async function renderSwitcher() {
-    var host = $('profile-switcher');
-    if (!host) return;
-    var students;
-    try {
-      students = await VH.api.students();
-    } catch (err) {
-      host.innerHTML = '<p class="font-body-sm text-body-sm text-on-surface-variant">' +
-        'Could not reach the database to list the others.</p>';
-      return;
-    }
-    host.innerHTML = students.map(function (s) {
-      var active = s.student_id === ctx.student.student_id;
-      return '<button type="button" data-pick="' + s.student_id + '" ' +
-        'class="w-full px-space-sm py-space-sm rounded-xl text-left flex items-center ' +
-        'justify-between gap-space-sm transition-colors ' +
-        (active ? 'bg-primary/15 border border-primary/40'
-                : 'bg-surface-container hover:bg-surface-container-high border border-transparent') +
-        '">' +
-        '<span class="flex items-center gap-space-sm min-w-0">' +
-        '<span class="w-8 h-8 rounded-full bg-primary-container/20 flex items-center ' +
-        'justify-center text-primary font-label-md text-label-md font-bold flex-shrink-0">' +
-        VH.fmt.esc(VH.fmt.initials(s.name)) + '</span>' +
-        '<span class="flex flex-col min-w-0">' +
-        '<span class="font-label-md text-label-md text-on-surface truncate">' +
-        VH.fmt.esc(s.name) + '</span>' +
-        '<span class="font-label-sm text-label-sm text-on-surface-variant truncate">' +
-        VH.fmt.esc(s.email) + (s.semester ? ' · semester ' + s.semester : '') + '</span>' +
-        '</span></span>' +
-        (active
-          ? '<span class="font-label-sm text-label-sm text-primary flex-shrink-0">viewing</span>'
-          : '<span class="material-symbols-outlined text-on-surface-variant flex-shrink-0">' +
-            'arrow_forward</span>') +
-        '</button>';
-    }).join('');
-
-    host.addEventListener('click', function (e) {
-      var pick = e.target.closest('[data-pick]');
-      if (!pick) return;
-      var id = Number(pick.getAttribute('data-pick'));
-      if (id === ctx.student.student_id) return;
-      VH.session.set(id);
-      window.location.reload();
-    });
   }
 
   async function health() {
@@ -363,7 +309,6 @@
     wirePrefs();
     wireSound();
     fillProfile();
-    await renderSwitcher();
 
     var form = $('profile-form');
     if (form) {

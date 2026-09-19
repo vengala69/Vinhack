@@ -30,9 +30,10 @@ never comes into it. Port 8000 is occupied on some machines, which is why the
 examples use 8010; any free port works.
 
 There are no accounts and no sign-in: this runs on one machine for one person,
-so the app opens straight on the first student in the database. Settings lists
-everyone and switches between them, and `?student=2` on any page links directly
-to one. `py db/setup.py --reset --seed` gives you three students with a
+so the app opens straight on the first student in the database and stays there.
+Edit who that is on the profile page. (`?student=2` on any page will point it
+at a different row if you need that while developing, but nothing in the UI
+offers it.) `py db/setup.py --reset --seed` gives you three students with a
 fortnight of history each.
 
 ## The screens
@@ -47,7 +48,7 @@ fortnight of history each.
 | `analytics.html` | `/insights`, `/grades` | — |
 | `therapist.html` | mood, sleep, tasks, `/insights`, `/wellbeing/status` | — (the chat is not stored) |
 | `profile.html` | `/students/{id}/profile` | the student record and their targets |
-| `settings.html` | `/students/{id}`, `/students`, `/health` | interface preferences; which student is being viewed (browser only) |
+| `settings.html` | `/students/{id}`, `/health` | the student record; interface preferences (browser only) |
 
 Two conventions worth knowing before editing a page:
 
