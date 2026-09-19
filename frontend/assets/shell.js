@@ -343,6 +343,119 @@ window.VH = window.VH || {};
     }, 1000);
   };
 
+  /* ---- Notifications ----------------------------------------------
+   *
+   * Built from rows, not from a queue: there is no push channel here, so the
+   * bell answers "what needs me right now" by looking at what is overdue, what
+   * lands in the next two days, and whether sleep is behind.
+   * ---------------------------------------------------------------- */
+
+  function noticePanel(bell) {
+    var panel = document.getElementById('vh-notices');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'vh-notices';
+    panel.className = 'hidden absolute right-0 top-full mt-2 z-[160] w-80 rounded-xl ' +
+      'bg-surface-container-high/97 border border-outline-variant/40 backdrop-blur-xl ' +
+      'shadow-2xl overflow-hidden max-h-96 overflow-y-auto';
+    var host = bell.parentElement || bell;
+    if (getComputedStyle(host).position === 'static') host.classList.add('relative');
+    host.appendChild(panel);
+    document.addEventListener('click', function (e) {
+      if (!panel.contains(e.target) && !bell.contains(e.target)) panel.classList.add('hidden');
+    });
+    return panel;
+  }
+
+  async function notices() {
+    var id = VH.session.id();
+    var out = [];
+    if (!id) return out;
+    var tasks = await VH.api.tasks(id, { open_only: true });
+    var now = new Date();
+    var soon = new Date(now.getTime() + 48 * 3600000);
+
+    tasks.forEach(function (task) {
+      if (!task.due_date) return;
+      var due = VH.fmt.parse(task.due_date);
+      if (due < now) {
+        out.push({ tone: 'error', icon: 'error', title: task.task_name,
+                   note: 'Overdue by ' + VH.fmt.until(task.due_date).replace('overdue ', ''),
+                   href: 'schedule.html' });
+      } else if (due <= soon) {
+        out.push({ tone: 'secondary', icon: 'schedule', title: task.task_name,
+                   note: 'Due ' + VH.fmt.until(task.due_date), href: 'schedule.html' });
+      }
+    });
+
+    var ins = VH.shell.insights;
+    if (ins && ins.sleep_debt_hours !== null && ins.sleep_debt_hours < -5) {
+      out.push({ tone: 'error', icon: 'bedtime', title: 'Sleep is behind',
+                 note: VH.fmt.hours(Math.abs(ins.sleep_debt_hours)) + ' short over ' +
+                       ins.window_days + ' days',
+                 href: 'sleep.html' });
+    }
+    if (ins && !ins.streak_days) {
+      out.push({ tone: 'secondary', icon: 'timer', title: 'No study streak',
+                 note: 'Nothing logged recently', href: 'focus.html' });
+    }
+    return out;
+  }
+
+  function wireBell() {
+    var bell = document.getElementById('notif-btn') ||
+               document.querySelector('button[aria-label="Notifications"]') ||
+               Array.prototype.filter.call(document.querySelectorAll('button'), function (b) {
+                 return b.textContent.trim() === 'notifications';
+               })[0];
+    if (!bell || bell.dataset.vhBell) return;
+    bell.dataset.vhBell = '1';
+
+    var dot = document.createElement('span');
+    dot.className = 'hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-error';
+    if (getComputedStyle(bell).position === 'static') bell.classList.add('relative');
+    bell.appendChild(dot);
+
+    function paint(items) {
+      dot.classList.toggle('hidden', !items.length);
+    }
+
+    notices().then(paint).catch(function () { /* the page will say so elsewhere */ });
+
+    bell.addEventListener('click', function (e) {
+      e.preventDefault();
+      var panel = noticePanel(bell);
+      if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
+      panel.innerHTML = '<div class="px-space-md py-space-sm font-body-sm text-body-sm ' +
+        'text-on-surface-variant">Checking&hellip;</div>';
+      panel.classList.remove('hidden');
+      notices().then(function (items) {
+        paint(items);
+        panel.innerHTML = items.length
+          ? '<div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase ' +
+            'tracking-wide text-on-surface-variant border-b border-outline-variant/30">' +
+            items.length + ' thing' + (items.length === 1 ? '' : 's') + ' needing you</div>' +
+            items.map(function (n) {
+              return '<a href="' + n.href + '" class="flex items-start gap-space-sm ' +
+                'px-space-md py-space-sm hover:bg-surface-container-highest transition-colors">' +
+                '<span class="material-symbols-outlined text-[18px] text-' + n.tone +
+                ' flex-shrink-0">' + n.icon + '</span>' +
+                '<span class="flex flex-col min-w-0">' +
+                '<span class="font-label-md text-label-md text-on-surface truncate">' +
+                VH.fmt.esc(n.title) + '</span>' +
+                '<span class="font-label-sm text-label-sm text-on-surface-variant">' +
+                VH.fmt.esc(n.note) + '</span></span></a>';
+            }).join('')
+          : '<div class="px-space-md py-space-md font-body-sm text-body-sm ' +
+            'text-on-surface-variant">Nothing overdue, nothing due in the next two days, ' +
+            'and sleep is on track.</div>';
+      }).catch(function (err) {
+        panel.innerHTML = '<div class="px-space-md py-space-sm font-body-sm text-body-sm ' +
+          'text-error">' + VH.fmt.esc(err.message) + '</div>';
+      });
+    });
+  }
+
   /* ---- Search ------------------------------------------------------ */
 
   function searchPanel(input) {
@@ -578,6 +691,7 @@ window.VH = window.VH || {};
 
     hydrate(student, insights, latency);
     wireSearch();
+    wireBell();
     document.title = 'StudySync — ' + student.name;
     return { student: student, insights: insights };
   };

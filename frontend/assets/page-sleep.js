@@ -744,12 +744,12 @@
       });
     }
 
-    var dismiss = document.querySelector('[data-dismiss-toast]');
+    /* The export's inline handler was stripped with its script; find the
+     * button by where it sits rather than by an attribute that is gone. */
+    var toastEl = $('statusToast');
+    var dismiss = toastEl ? toastEl.querySelector('button') : null;
     if (dismiss) {
-      dismiss.addEventListener('click', function () {
-        var toast = $('statusToast');
-        if (toast) toast.classList.add('hidden');
-      });
+      dismiss.addEventListener('click', function () { toastEl.classList.add('hidden'); });
     }
 
     document.addEventListener('keydown', function (e) {

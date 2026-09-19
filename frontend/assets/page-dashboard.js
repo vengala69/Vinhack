@@ -650,9 +650,22 @@
     await reload();
   }
 
+  /* Refill from whatever is in state now. Reusing the node is fine; reusing
+   * the values it was built with is what made saving look like a no-op. */
+  function fillScreenTimeForm(wrap) {
+    var row = state.screen[0];
+    var current = row && row.date === ctx.insights.today ? row : {};
+    SCREEN_PARTS.forEach(function (part) {
+      var input = wrap.querySelector('[name="' + part.key + '"]');
+      if (input) input.value = current[part.key] || 0;
+    });
+    var when = wrap.querySelector('[data-screen-day]');
+    if (when) when.textContent = VH.fmt.longDate(ctx.insights.today);
+  }
+
   function screenTimeModal() {
     var existing = document.getElementById('vh-screen-time');
-    if (existing) return existing;
+    if (existing) { fillScreenTimeForm(existing); return existing; }
     var row = state.screen[0];
     var today = ctx.insights.today;
     var current = row && row.date === today ? row : {};
@@ -676,7 +689,8 @@
       '<button type="button" data-close="1" class="text-on-surface-variant hover:text-on-surface">' +
       '<span class="material-symbols-outlined">close</span></button></div>' +
       '<p class="font-body-sm text-body-sm text-on-surface-variant">Minutes for ' +
-      VH.fmt.esc(VH.fmt.longDate(today)) + '. Re-submitting replaces the day.</p>' +
+      '<span data-screen-day>' + VH.fmt.esc(VH.fmt.longDate(today)) +
+      '</span>. Re-submitting replaces the day.</p>' +
       '<div class="grid grid-cols-2 gap-space-sm">' + fields + '</div>' +
       '<div class="flex justify-end gap-space-sm pt-space-xs">' +
       '<button type="button" data-close="1" class="px-space-md py-space-xs rounded-lg ' +
@@ -781,7 +795,30 @@
     renderScreen();
     renderDrawer();
     renderActionPlan();
+    renderActionTiles();
     renderPalette('');
+  }
+
+  /* The three tiles under the copilot summary. These read state that any
+   * write can change, so they belong in the render pass, not in boot(). */
+  function renderActionTiles() {
+    set('act-block-when', VH.fmt.clock(VH.fmt.stamp(nextFreeHour())) + ' for 50 minutes');
+
+    var row = state.screen[0];
+    var loggedToday = row && row.date === ctx.insights.today;
+    set('shield-status-text', loggedToday
+      ? VH.fmt.hm(row.total_screen_minutes) + ' logged today'
+      : 'Nothing logged for today');
+    var button = $('btn-screen-time');
+    if (button) button.textContent = loggedToday ? 'Edit' : 'Add';
+
+    var next = nextDeadline();
+    set('defer-history-desc', next
+      ? next.task_name + ' · ' + VH.fmt.until(next.due_date)
+      : 'Nothing has a due date');
+    var defer = $('btn-defer-history');
+    if (defer) defer.disabled = !next;
+    if (defer) defer.classList.toggle('opacity-40', !next);
   }
 
   /* ------------------------------------------------------------------
@@ -846,6 +883,17 @@
     on('export-calendar-btn', function () { window.location.href = 'schedule.html'; });
 
     on('open-breathing-btn', VH.shell.openBreathing);
+    /* The export left its own breathing modal in the page with dead controls.
+     * The shell owns breathing now, so these hand over to it. */
+    on('breathing-toggle-btn', function () {
+      modal('breathing-modal', false);
+      VH.shell.openBreathing();
+    });
+    on('breathing-reset-btn', function () {
+      modal('breathing-modal', false);
+      VH.shell.openBreathing();
+    });
+    on('profile-actions-btn', function () { window.location.href = 'profile.html'; });
     on('start-inline-breathing', VH.shell.openBreathing);
     on('modal-close-breathing', function () { modal('breathing-modal', false); });
     on('close-breathing-backdrop', function () { modal('breathing-modal', false); });
@@ -992,15 +1040,6 @@
     if (!ctx) return;
     wire();
     await reload();
-    set('act-block-when', VH.fmt.clock(VH.fmt.stamp(nextFreeHour())) + ' for 50 minutes');
-    var row = state.screen[0];
-    set('shield-status-text', row && row.date === ctx.insights.today
-      ? VH.fmt.hm(row.total_screen_minutes) + ' logged today'
-      : 'Nothing logged for today');
-    var next = nextDeadline();
-    set('defer-history-desc', next
-      ? next.task_name + ' · ' + VH.fmt.until(next.due_date)
-      : 'Nothing has a due date');
     paintTimer();
     await restoreTimer();
   }

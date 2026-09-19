@@ -531,6 +531,17 @@
       });
     }
 
+    /* "View Settings" had no handler. The settings it implies are the
+     * interface preferences, so it goes there. */
+    Array.prototype.forEach.call(document.querySelectorAll('button'), function (btn) {
+      if (/View Settings/i.test(btn.textContent)) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          window.location.href = 'settings.html';
+        });
+      }
+    });
+
     var add = $('sched-add');
     if (add) add.addEventListener('click', function (e) { e.preventDefault(); openAddBlock(null); });
 
