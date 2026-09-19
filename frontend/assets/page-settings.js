@@ -233,7 +233,7 @@
     var clear = $('clear-prefs');
     if (clear) {
       clear.addEventListener('click', function () {
-        if (!window.confirm('Reset interface preferences and reopen as the first student?')) return;
+        if (!window.confirm('Reset every interface preference back to its default?')) return;
         try {
           window.localStorage.removeItem(PREFS_KEY);
         } catch (err) { /* private mode */ }

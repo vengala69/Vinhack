@@ -545,7 +545,7 @@
       }
 
       if (e.target.closest('#scores-add')) { e.preventDefault(); openScoreModal(); return; }
-      if (e.target.closest('#scores-export') || e.target.closest('#scores-export-2')) {
+      if (e.target.closest('#scores-export') || e.target.closest('[data-scores="export"]')) {
         e.preventDefault();
         exportCsv();
         return;
@@ -567,17 +567,17 @@
       paintWhatIf();
     });
 
-    var reset = document.querySelector('button .material-symbols-outlined');
-    Array.prototype.forEach.call(document.querySelectorAll('button'), function (btn) {
-      if (/Reset Defaults/i.test(btn.textContent)) {
-        btn.addEventListener('click', function (e) {
-          e.preventDefault();
-          resetWhatIf();
-          renderWhatIf();
-        });
+    /* Matching "Reset Defaults" on its label text broke the moment anyone
+     * reworded the button, so it carries a data attribute now. */
+    document.addEventListener('click', function (e) {
+      var hook = e.target.closest('[data-scores]');
+      if (!hook) return;
+      e.preventDefault();
+      if (hook.getAttribute('data-scores') === 'reset-whatif') {
+        resetWhatIf();
+        renderWhatIf();
       }
     });
-    if (reset) { /* referenced to keep the lookup meaningful */ }
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
