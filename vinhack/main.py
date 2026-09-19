@@ -5,6 +5,7 @@ Run it with:  py -m vinhack     (or: uvicorn vinhack.main:app --reload)
 Interactive docs live at http://127.0.0.1:8000/docs - the fastest way to see
 every endpoint and try it without writing a line of frontend code.
 """
+import logging
 import sqlite3
 from datetime import date, timedelta
 from typing import Any, Optional
@@ -17,6 +18,8 @@ from . import models as m
 from . import wellbeing
 from .db import (DB_PATH, ROOT, add_missing_columns, connect, get_conn, insert, one,
                  rows, run_script, schema_exists, update)
+
+log = logging.getLogger("vinhack.wellbeing")
 
 app = FastAPI(
     title="VinHack API",
@@ -750,17 +753,19 @@ def wellbeing_status():
         "model_available": wellbeing.configured(),
         "model": wellbeing.MODEL if wellbeing.configured() else None,
         "detail": None if wellbeing.configured() else
-                  "No ANTHROPIC_API_KEY is set, so the chat is using its built-in "
-                  "scripted replies. Set the key and restart to enable the model.",
+                  "No ANTHROPIC_API_KEY is set, so the chat cannot answer. Put the key "
+                  "in .env (see .env.example) and restart the server.",
     }
 
 
 @app.post("/api/students/{student_id}/wellbeing/chat", tags=["wellbeing"])
 def wellbeing_chat(student_id: int, body: m.ChatIn, conn=Depends(get_conn)):
-    """One reply, grounded in this student's own logged figures.
+    """One reply from the model, grounded in this student's own logged figures.
 
-    Returns 503 when no key is configured - the frontend treats that as
-    "fall back to the scripted replies" rather than an error worth showing.
+    Every message the user sends arrives here and goes to the model as typed;
+    nothing inspects it for keywords. Returns 503 when no key is configured and
+    502 when the call fails - the page shows the error rather than inventing a
+    reply of its own.
     """
     require_student(conn, student_id)
     if not wellbeing.configured():
@@ -776,7 +781,10 @@ def wellbeing_chat(student_id: int, body: m.ChatIn, conn=Depends(get_conn)):
     try:
         return wellbeing.reply(body.message, [t.model_dump() for t in body.history], context)
     except RuntimeError as exc:
-        raise HTTPException(502, str(exc))
+        # Full detail to the server log for debugging; the client gets a plain
+        # message, because provider errors can echo back request internals.
+        log.error("wellbeing chat failed for student %s: %s", student_id, exc)
+        raise HTTPException(502, "The chat model could not be reached. Please try again.")
 
 
 # ---------------------------------------------------------------------

@@ -120,52 +120,9 @@
       ? 'This is an AI, not a person and not a counsellor. Nothing you type is stored &mdash; ' +
         'it is sent to the model for one reply and then forgotten. For anything serious, ' +
         'talk to someone real.'
-      : 'This box is a set of scripted replies &mdash; no model is configured, so it is ' +
-        'pattern-matching on keywords. Nothing you type is saved or sent anywhere.';
+      : 'No model is configured on the server yet, so this chat cannot answer. Add your ' +
+        'API key to .env and restart. For anything serious, talk to someone real.';
     return lead + '<br><br>' + caveat;
-  }
-
-  var REPLIES = [
-    {
-      match: /spiral|fail|panic|catastroph|ruin/i,
-      text: 'Name the thought plainly: &ldquo;if this goes badly, everything is ruined.&rdquo; ' +
-        'Written down it stops being a fact and goes back to being a prediction. Then the ' +
-        'boring question: what is the realistic worst case, and what would you actually do ' +
-        'the next morning? Three slow exhales first &mdash; the breathing button up top runs them for you.'
-    },
-    {
-      match: /sleep|tired|exhaust|insomnia|awake/i,
-      text: 'Over-tiredness raises cortisol, which is exactly the thing that feels like being ' +
-        'awake. Nothing more goes in tonight. Set an alarm for seven hours from now, get the ' +
-        'overhead light off, and let tomorrow-you deal with the rest.'
-    },
-    {
-      match: /email|extension|deadline|late|professor|lecturer/i,
-      text: 'Short and factual works better than a long explanation:<br><br>' +
-        '<em>&ldquo;Dear [name], I am asking for a short extension on [assignment] due to ' +
-        'circumstances affecting my health this week. I expect to submit by [date]. ' +
-        'Thank you for considering it.&rdquo;</em><br><br>' +
-        'No diagnosis, no apology paragraph. Most people say yes to the short version.'
-    },
-    {
-      match: /imposter|belong|stupid|not good enough|fraud/i,
-      text: 'Feeling out of place is not evidence of being out of place. Three things you ' +
-        'finished this term that took actual competence &mdash; write them down. Feeling ' +
-        'inadequate at one subject is not the same as being inadequate.'
-    },
-    {
-      match: /alone|lonely|isolat|nobody/i,
-      text: 'The step that works is smaller than the one you are picturing. Not a conversation ' +
-        '&mdash; one message to one person, of any length. Curtains open, cold water, then that.'
-    }
-  ];
-
-  function reply(text) {
-    var hit = REPLIES.filter(function (r) { return r.match.test(text); })[0];
-    return hit ? hit.text
-      : 'Getting it out of your head and into words is the useful part, and you have just done ' +
-        'that. If it keeps sitting on you, the panel below has where to take it &mdash; this box ' +
-        'cannot, and it is not pretending to.';
   }
 
   function bubble(who, text, mine) {
@@ -210,9 +167,9 @@
     say(ctx.student.name, VH.fmt.esc(text), true);
 
     var pending = thinking();
-    var who = state.model ? 'Dr. Sync' : 'Prompt';
     try {
-      if (!state.model) throw new Error('no model');
+      /* Whatever they typed goes to the model exactly as typed. Nothing here
+       * looks at the content to decide what to do with it. */
       var answer = await VH.api.wellbeingChat(ctx.student.student_id, {
         message: text,
         history: state.history.slice(-12)
@@ -220,20 +177,24 @@
       if (pending) pending.remove();
       /* The model writes prose, not markup - escape it, then honour blank
        * lines as paragraph breaks. */
-      say(who, VH.fmt.esc(answer.reply).replace(/\n\n+/g, '<br><br>')
-                                      .replace(/\n/g, '<br>'), false);
+      say('Dr. Sync', VH.fmt.esc(answer.reply).replace(/\n\n+/g, '<br><br>')
+                                              .replace(/\n/g, '<br>'), false);
       state.history.push({ role: 'user', content: text });
       state.history.push({ role: 'assistant', content: answer.reply });
-    } catch (err) {
-      if (pending) pending.remove();
-      if (state.model && !/no model/.test(err.message || '')) {
-        /* The model was supposed to be there and something went wrong. Say so
-         * rather than silently switching to canned text. */
-        VH.toast('Chat model unavailable, using built-in replies.', 'info');
-        state.model = null;
+      if (answer.model && answer.model !== state.model) {
+        state.model = answer.model;
         paintMode();
       }
-      say('Prompt', reply(text), false);
+    } catch (err) {
+      if (pending) pending.remove();
+      /* A failed call is reported as a failure. Nothing canned stands in for
+       * the model, because a fake answer here would be worse than none. */
+      var detail = (err && err.status === 503)
+        ? 'No model is configured on the server, so I cannot answer. Add ANTHROPIC_API_KEY ' +
+          'to .env and restart.'
+        : 'I am having trouble responding right now. Please try again.';
+      say('Dr. Sync', '<span class="text-error">' + VH.fmt.esc(detail) + '</span>', false);
+      if (window.console && console.error) console.error('[wellbeing chat]', err);
     } finally {
       state.sending = false;
     }
@@ -349,7 +310,7 @@
     if (label) {
       label.textContent = state.model
         ? 'Answers from ' + state.model
-        : 'Built-in replies — no model configured';
+        : 'No model configured';
     }
   }
 
