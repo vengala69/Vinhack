@@ -1,4 +1,4 @@
-/* The app shell every page shares: who is signed in, the sidebar, the header
+/* The app shell every page shares: which student is open, the sidebar, the header
  * chrome, toasts, and the two global actions in the top bar.
  *
  * The pages came out of Stitch as nine standalone mockups, so each one carries
@@ -453,8 +453,24 @@ window.VH = window.VH || {};
   VH.shell.insights = null;
   VH.shell.subjects = [];
 
-  /* Pages call this and get back the two things nearly all of them need.
-   * page === 'login' skips the guard, since that is where you go to sign in. */
+  /* Pages call this and get back the two things nearly all of them need. */
+  /* There is no login screen. With nothing stored, open on whoever is first
+   * in the database - the API has no accounts, so this is only a default pick. */
+  VH.shell.defaultStudentId = async function () {
+    var list;
+    try {
+      list = await VH.api.students();
+    } catch (err) {
+      VH.fail(err, 'Loading your data');
+      return null;
+    }
+    if (!list || !list.length) {
+      VH.toast('No students in the database - seed it with: py db/setup.py --reset --seed', 'error');
+      return null;
+    }
+    return list[0].student_id;
+  };
+
   VH.shell.boot = async function (page) {
     wireNav();
 
@@ -484,17 +500,17 @@ window.VH = window.VH || {};
       });
     });
 
-    if (page === 'login') return null;
-
-    /* ?student=2 opens a specific profile and remembers it, so a page can be
-     * linked to directly rather than only reached through the picker. */
+    /* ?student=2 opens a specific profile and remembers it. With no login
+     * screen this is the only way to point the app at someone other than the
+     * first student without going through Settings. */
     var asked = parseInt(new URLSearchParams(window.location.search).get('student'), 10);
     if (!isNaN(asked)) VH.session.set(asked);
 
     var id = VH.session.id();
     if (!id) {
-      window.location.replace('login.html');
-      return null;
+      id = await VH.shell.defaultStudentId();
+      if (!id) return null;
+      VH.session.set(id);
     }
 
     var started = performance.now();
@@ -504,13 +520,24 @@ window.VH = window.VH || {};
       insights = await VH.api.insights(id, 14);
     } catch (err) {
       if (err instanceof VH.ApiError && err.status === 404) {
-        /* The stored id points at a student who has since been deleted. */
+        /* The stored id points at a student who has since been deleted:
+         * fall back to whoever is first in the database. */
         VH.session.clear();
-        window.location.replace('login.html');
+        var fallback = await VH.shell.defaultStudentId();
+        if (!fallback || fallback === id) return null;
+        VH.session.set(fallback);
+        id = fallback;
+        try {
+          student = await VH.api.student(id);
+          insights = await VH.api.insights(id, 14);
+        } catch (retryErr) {
+          VH.fail(retryErr, 'Loading your data');
+          return null;
+        }
+      } else {
+        VH.fail(err, 'Loading your data');
         return null;
       }
-      VH.fail(err, 'Loading your data');
-      return null;
     }
     var latency = performance.now() - started;
 

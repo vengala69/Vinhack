@@ -205,12 +205,12 @@
     var clear = $('clear-prefs');
     if (clear) {
       clear.addEventListener('click', function () {
-        if (!window.confirm('Reset interface preferences and sign this browser out?')) return;
+        if (!window.confirm('Reset interface preferences and reopen as the first student?')) return;
         try {
           window.localStorage.removeItem(PREFS_KEY);
         } catch (err) { /* private mode */ }
         VH.session.clear();
-        window.location.href = 'login.html';
+        window.location.reload();
       });
     }
   }
@@ -229,8 +229,6 @@
       VH.fmt.longDate(ctx.student.created_at));
     set('profile-status', 'Saved to the students table');
     set('set-revision', 'Student #' + ctx.student.student_id);
-    set('set-session-note', 'Signed in as ' + ctx.student.name + ' in this browser');
-    set('logout-note', 'Any running focus session stays open in the database.');
   }
 
   async function saveProfile(form) {
@@ -257,42 +255,61 @@
       el.textContent = VH.fmt.initials(updated.name);
     });
     fillProfile();
+    await renderSwitcher();
     VH.toast('Record updated.');
   }
 
   /* ------------------------------------------------------------------
-   * Switching profile
+   * Choosing which student to view
+   *
+   * Not a session: there is no login. This just decides which student_id the
+   * pages read, and it is remembered per browser.
    * ---------------------------------------------------------------- */
 
-  function wireSession() {
-    var open = $('openLogoutModalBtn');
-    var modal = $('logoutModal');
-    var card = $('modalCard');
-    var cancel = $('cancelLogoutBtn');
-    var confirm = $('confirmLogoutBtn');
+  async function renderSwitcher() {
+    var host = $('profile-switcher');
+    if (!host) return;
+    var students;
+    try {
+      students = await VH.api.students();
+    } catch (err) {
+      host.innerHTML = '<p class="font-body-sm text-body-sm text-on-surface-variant">' +
+        'Could not reach the database to list the others.</p>';
+      return;
+    }
+    host.innerHTML = students.map(function (s) {
+      var active = s.student_id === ctx.student.student_id;
+      return '<button type="button" data-pick="' + s.student_id + '" ' +
+        'class="w-full px-space-sm py-space-sm rounded-xl text-left flex items-center ' +
+        'justify-between gap-space-sm transition-colors ' +
+        (active ? 'bg-primary/15 border border-primary/40'
+                : 'bg-surface-container hover:bg-surface-container-high border border-transparent') +
+        '">' +
+        '<span class="flex items-center gap-space-sm min-w-0">' +
+        '<span class="w-8 h-8 rounded-full bg-primary-container/20 flex items-center ' +
+        'justify-center text-primary font-label-md text-label-md font-bold flex-shrink-0">' +
+        VH.fmt.esc(VH.fmt.initials(s.name)) + '</span>' +
+        '<span class="flex flex-col min-w-0">' +
+        '<span class="font-label-md text-label-md text-on-surface truncate">' +
+        VH.fmt.esc(s.name) + '</span>' +
+        '<span class="font-label-sm text-label-sm text-on-surface-variant truncate">' +
+        VH.fmt.esc(s.email) + (s.semester ? ' · semester ' + s.semester : '') + '</span>' +
+        '</span></span>' +
+        (active
+          ? '<span class="font-label-sm text-label-sm text-primary flex-shrink-0">viewing</span>'
+          : '<span class="material-symbols-outlined text-on-surface-variant flex-shrink-0">' +
+            'arrow_forward</span>') +
+        '</button>';
+    }).join('');
 
-    function show() {
-      if (!modal) return;
-      modal.classList.remove('hidden');
-      setTimeout(function () {
-        if (card) { card.classList.remove('scale-95'); card.classList.add('scale-100'); }
-      }, 10);
-    }
-    function hide() {
-      if (!modal) return;
-      if (card) { card.classList.remove('scale-100'); card.classList.add('scale-95'); }
-      setTimeout(function () { modal.classList.add('hidden'); }, 150);
-    }
-
-    if (open) open.addEventListener('click', function (e) { e.preventDefault(); show(); });
-    if (cancel) cancel.addEventListener('click', hide);
-    if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) hide(); });
-    if (confirm) {
-      confirm.addEventListener('click', function () {
-        VH.session.clear();
-        window.location.href = 'login.html';
-      });
-    }
+    host.addEventListener('click', function (e) {
+      var pick = e.target.closest('[data-pick]');
+      if (!pick) return;
+      var id = Number(pick.getAttribute('data-pick'));
+      if (id === ctx.student.student_id) return;
+      VH.session.set(id);
+      window.location.reload();
+    });
   }
 
   async function health() {
@@ -316,8 +333,8 @@
     if (!ctx) return;
     paintPrefs();
     wirePrefs();
-    wireSession();
     fillProfile();
+    await renderSwitcher();
 
     var form = $('profile-form');
     if (form) {
