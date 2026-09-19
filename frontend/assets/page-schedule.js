@@ -386,6 +386,9 @@
       location: (data.get('location') || '').trim() || null
     });
     closeAddBlock();
+    /* Follow the block to the week it landed in, so adding one for next
+     * Tuesday does not look like nothing happened. */
+    state.weekStart = mondayOf(start);
     VH.toast('Block added on ' + VH.fmt.longDate(VH.fmt.stamp(start)) + '.');
     await reload();
   }

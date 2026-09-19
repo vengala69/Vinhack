@@ -11,3 +11,6 @@ venv/
 
 # generated intermediate for the schema PDF
 docs/schema.html
+
+# test tooling
+node_modules/

@@ -241,6 +241,26 @@ List endpoints accept `?from=` and `?to=` dates and a `?limit=`.
   it before responding, so the dashboard is never a step behind. `POST
   /api/rollup` is still there for bulk imports.
 
+## Tests
+
+`tests/roundtrips.mjs` drives nine write paths through the real pages and
+checks that the widgets reading that data actually moved — not that the POST
+returned 201, which was never the failing part.
+
+```
+cd tests && npm install         # jsdom, dev-only, not vendored
+py db/setup.py --reset --seed
+py -m uvicorn vinhack.main:app --port 8010
+node tests/roundtrips.mjs                # all nine
+node tests/roundtrips.mjs quick-task     # one by name
+```
+
+It covers quick task, completing a task, starting and stopping a focus
+session, logging sleep, a mood check-in, logging a score, adding a study
+block, and changing the sleep goal on the profile and seeing it reach the
+sleep page and the dashboard. **It writes to whatever database the API is
+pointed at**, so run it against a seeded dev copy.
+
 ### Status codes
 
 `422` failed validation before reaching the database, `409` a database

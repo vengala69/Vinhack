@@ -790,5 +790,26 @@ def wellbeing_chat(student_id: int, body: m.ChatIn, conn=Depends(get_conn)):
 
 FRONTEND_DIR = ROOT / "frontend"
 
+
+class FreshStaticFiles(StaticFiles):
+    """StaticFiles that makes the browser revalidate instead of guessing.
+
+    The default headers let a browser reuse a cached asset without asking,
+    which during development is indistinguishable from a bug: you fix
+    something, reload, and the old behaviour is still there. `no-cache` keeps
+    the file cached but forces a conditional request, so the existing ETag
+    still answers with a 304 when nothing has changed.
+    """
+
+    def is_not_modified(self, response_headers, request_headers) -> bool:
+        response_headers["cache-control"] = "no-cache"
+        return super().is_not_modified(response_headers, request_headers)
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["cache-control"] = "no-cache"
+        return response
+
+
 if FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+    app.mount("/", FreshStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

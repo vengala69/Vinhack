@@ -94,6 +94,8 @@
     startBreathing();
     runClock();
     VH.toast('Session started. It is open in the database until you stop it.');
+    /* The row is written; the panels below still show the state from load. */
+    await reload();
   }
 
   async function stopSession() {
@@ -131,11 +133,30 @@
 
   async function restore() {
     var saved = readSaved();
-    if (!saved || saved.student !== ctx.student.student_id) return;
-    var open = state.sessions.filter(function (s) {
-      return s.session_id === saved.id && !s.end_time;
-    })[0];
-    if (!open) { writeSaved(null); return; }
+    var open = null;
+
+    if (saved && saved.student === ctx.student.student_id) {
+      open = state.sessions.filter(function (s) {
+        return s.session_id === saved.id && !s.end_time;
+      })[0] || null;
+      if (!open) writeSaved(null);
+    }
+
+    /* localStorage is a convenience, not the record. If it has been cleared
+     * but a session is still open in the database, adopt it - otherwise the
+     * page offers to start a second one and the first is orphaned. */
+    if (!open) {
+      open = state.sessions.filter(function (s) { return !s.end_time; })
+        .sort(function (a, b) { return a.start_time < b.start_time ? 1 : -1; })[0] || null;
+      if (open) {
+        writeSaved({ id: open.session_id,
+                     startedAt: VH.fmt.parse(open.start_time).getTime(),
+                     student: ctx.student.student_id });
+        VH.toast('Picked up a session left running since ' +
+                 VH.fmt.clock(open.start_time) + '.', 'info');
+      }
+    }
+    if (!open) return;
     timer.id = open.session_id;
     timer.startedAt = VH.fmt.parse(open.start_time).getTime();
     if (open.task_id) {
