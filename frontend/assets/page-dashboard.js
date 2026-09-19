@@ -10,7 +10,8 @@
 
   var TIMER_KEY = 'vinhack.session';   // the study session left running
   var WINDDOWN_KEY = 'vinhack.winddown';
-  var SLEEP_GOAL_MIN = 480;            // eight hours
+  /* Overwritten from /insights with the student's own target. */
+  var SLEEP_GOAL_MIN = 480;
 
   var ctx = null;
   var state = { tasks: [], sleep: [], screen: [], dash: null, filter: 'all' };
@@ -30,6 +31,8 @@
     if (score >= 45) return labels[2];
     return labels[3];
   }
+
+  function goalLabel() { return VH.fmt.hours(SLEEP_GOAL_MIN / 60); }
 
   function greeting() {
     var h = new Date().getHours();
@@ -71,7 +74,7 @@
       ? 'No sleep logged'
       : 'Sleep ' + VH.fmt.hours(avgSleep / 60) + ' avg (' +
         (avgSleep >= SLEEP_GOAL_MIN ? '+' : '−') +
-        VH.fmt.hours(Math.abs(avgSleep - SLEEP_GOAL_MIN) / 60) + ' vs 8h)');
+        VH.fmt.hours(Math.abs(avgSleep - SLEEP_GOAL_MIN) / 60) + ' vs ' + goalLabel() + ')');
 
     var today = todayMetric();
     set('orbit-focus', today && today.study_hours_completed
@@ -92,7 +95,7 @@
       ? 'Nothing logged yet'
       : (debt < 0
           ? VH.fmt.hours(Math.abs(debt)) + ' behind over ' + ins.window_days + ' days'
-          : VH.fmt.hours(debt) + ' ahead of the 8h goal'));
+          : VH.fmt.hours(debt) + ' ahead of the ' + goalLabel() + ' goal'));
 
     var week = dueThisWeek();
     set('ring-work-title', state.tasks.length > 8 ? 'Heavy workload'
@@ -158,7 +161,8 @@
     }
     if (ins.sleep_debt_hours !== null && ins.sleep_debt_hours < -2) {
       lines.push('You are ' + VH.fmt.hours(Math.abs(ins.sleep_debt_hours)) +
-        ' short of eight hours a night across the last ' + ins.window_days + ' days.');
+        ' short of your ' + goalLabel() + ' target across the last ' +
+        ins.window_days + ' days.');
     } else if (ins.averages.avg_sleep_minutes) {
       lines.push('Sleep is averaging ' + VH.fmt.hours(ins.averages.avg_sleep_minutes / 60) + ' a night.');
     }
@@ -184,7 +188,7 @@
 
     var bed = bedtimeTarget();
     set('tile-bed-value', bed ? VH.fmt.clock(VH.fmt.stamp(bed)) : '--');
-    set('tile-bed-note', bed ? 'for 8h' : 'log a night first');
+    set('tile-bed-note', bed ? 'for ' + goalLabel() : 'log a night first');
   }
 
   /* ------------------------------------------------------------------
@@ -327,7 +331,7 @@
     var avg = ins.averages.avg_sleep_minutes;
     set('sleep-avg', avg ? VH.fmt.hours(avg / 60) : '--');
     set('sleep-goal', avg
-      ? 'Goal 8.0h (' + (avg >= SLEEP_GOAL_MIN ? '+' : '−') +
+      ? 'Goal ' + goalLabel() + ' (' + (avg >= SLEEP_GOAL_MIN ? '+' : '−') +
         VH.fmt.hours(Math.abs(avg - SLEEP_GOAL_MIN) / 60) + ' avg)'
       : 'No nights logged yet');
 
@@ -371,7 +375,8 @@
     var bed = bedtimeTarget();
     html('sleep-bedtime', bed
       ? 'Lights out by <strong class="text-on-surface font-semibold">' +
-        VH.fmt.clock(VH.fmt.stamp(bed)) + '</strong> to clear 8h before your usual wake time'
+        VH.fmt.clock(VH.fmt.stamp(bed)) + '</strong> to clear ' + goalLabel() +
+        ' before your usual wake time'
       : 'Log a night with a bedtime and wake time to get a target.');
   }
 
@@ -461,7 +466,7 @@
     var tips = [];
     if (bed) {
       tips.push(['Aim for lights out at ' + VH.fmt.clock(VH.fmt.stamp(bed)),
-                 'That clears eight hours before the time you normally wake.']);
+                 'That clears ' + goalLabel() + ' before the time you normally wake.']);
     }
     var late = (ins.focus_by_part_of_day || []).filter(function (p) {
       return p.part_of_day === 'late night';
@@ -508,7 +513,7 @@
     var bed = bedtimeTarget();
     if (bed) {
       rows.push({ time: VH.fmt.clock(VH.fmt.stamp(bed)), title: 'Lights out',
-                  note: 'Eight hours before your usual wake time', tag: 'target' });
+                  note: goalLabel() + ' before your usual wake time', tag: 'target' });
     }
 
     set('action-plan-title', firstName(ctx.student.name) + '’s day');
@@ -759,6 +764,7 @@
     state.tasks = results[3];
     ctx.insights = results[4];
     VH.shell.insights = results[4];
+    SLEEP_GOAL_MIN = (ctx.insights.goals && ctx.insights.goals.sleep_goal_minutes) || 480;
 
     /* Hours logged per task, for the progress bar on each card. */
     state.effortByTask = {};

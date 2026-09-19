@@ -46,7 +46,8 @@ fortnight of history each.
 | `scores.html` | `/grades`, `/assessments` | assessments |
 | `analytics.html` | `/insights`, `/grades` | — |
 | `therapist.html` | mood, sleep, tasks, `/insights`, `/wellbeing/status` | — (the chat is not stored) |
-| `settings.html` | `/students/{id}`, `/students`, `/health` | the student record; which student is being viewed (browser only) |
+| `profile.html` | `/students/{id}/profile` | the student record and their targets |
+| `settings.html` | `/students/{id}`, `/students`, `/health` | interface preferences; which student is being viewed (browser only) |
 
 Two conventions worth knowing before editing a page:
 
@@ -112,17 +113,21 @@ it is gone when the tab closes.
 Every sound in the app is synthesised in the browser with the Web Audio API.
 Nothing is downloaded, nothing is licensed, and it works offline.
 
-**Soundscapes** (loops, one at a time &mdash; clicking the playing one stops it):
+**Soundscapes** on Focus Mode (loops, one at a time &mdash; clicking the
+playing one stops it):
 
-| Track | Where | How it is made |
-|---|---|---|
-| Binaural 6Hz | Focus Mode | two oscillators 6Hz apart, panned hard L/R |
-| Brown noise | Focus Mode | white noise integrated, for room tone |
-| Rain | both | band-passed white noise with a slow tremolo |
-| Alpha 10Hz | Therapist | binaural, 10Hz beat |
-| 432Hz theta | Therapist | binaural, 432Hz carrier |
-| Vagus tone | Therapist | 110Hz sine with a slow wobble |
-| NSDR bed | Therapist | low-passed brown noise, breathing slowly |
+| Track | How it is made |
+|---|---|
+| Binaural 6Hz | two oscillators 6Hz apart, panned hard L/R |
+| Brown noise | white noise integrated, for room tone |
+| Rain | band-passed white noise with a slow tremolo |
+
+The Therapist screen's "frequency regulation" panel was removed. Each of its
+four tiles attached a physiological claim to an oscillator &mdash; a cortisol
+flush, a vagus nerve reset, striatal dopamine &mdash; and while the tones
+played, the claims were the part that could not be made true. NSDR was the
+clearest case: it is a guided voice protocol, and low-passed noise is not a
+quiet version of one, it is a different thing wearing its name.
 
 **Cues** (one-shots, scheduled so they sound over a playing loop and are never
 clipped when it stops): the focus timer reaching zero, a session starting and
@@ -141,6 +146,27 @@ want real recordings (a genuine rain field recording sounds better than
 filtered noise), drop CC0 files into `frontend/assets/audio/` and swap the
 matching entry in `TRACKS` for an `<audio>` element; the rest of the API stays
 the same.
+
+### Targets, and the profile page
+
+`profile.html` holds the student's record &mdash; name, email, semester,
+programme, registration number &mdash; along with the two targets the app
+scores them against, a count of everything they have logged, and a button that
+clears that data without deleting the profile. It is reached by clicking the
+profile strip at the bottom of the sidebar, on any page.
+
+The sleep target is the reason the page exists. Eight hours was hard-coded in
+six places and inside the sleep score; a student on night shifts and one with
+9am lectures should not be measured against the same number. It is now a column
+on `students`, it drives the sleep card, the debt figure, the bedtime
+suggestion and the sleep half of the overall index, and the three seeded
+students deliberately have three different targets so you can see it working.
+
+Columns added after the first release cannot be introduced by
+`CREATE TABLE IF NOT EXISTS`, so `vinhack/db.py` keeps a `LATER_COLUMNS` list
+and `add_missing_columns()` runs on startup: it reads what is actually in the
+table and adds only the gap. An existing `vinhack.db` picks up the new fields
+on the next boot, with no reset and no data loss.
 
 ## API
 

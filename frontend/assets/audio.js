@@ -1,8 +1,13 @@
-/* Soundscapes, synthesised in the browser.
+/* Soundscapes and cues, synthesised in the browser.
  *
  * No audio files ship with this build, and none need to: everything here is
  * generated with the Web Audio API, so there is nothing to download, nothing
  * to licence, and it works offline.
+ *
+ * Every track here does exactly what its label says - noise shaped one way or
+ * another, and short tones. Tracks that claimed a physiological effect (a
+ * cortisol flush, a vagus nerve reset, non-sleep deep rest) were removed: the
+ * oscillator worked, the claim was the part that could not be made true.
  *
  * Browsers will not start audio until the user has interacted with the page,
  * so every track starts from a click and the context is resumed on the way in.
@@ -103,26 +108,6 @@ window.VH = window.VH || {};
       var gain = master(0.07);
       noise(false, { type: 'bandpass', frequency: 1400, q: 0.6 }, gain);
       tremolo(gain, 0.08, 0.02);
-    },
-
-    /* Wellbeing page */
-    alpha: function () { binaural(220, 10, master(0.07)); },
-    theta432: function () { binaural(432, 6, master(0.06)); },
-    vagus: function () {
-      var gain = master(0.09);
-      var osc = context.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = 110;
-      osc.connect(gain);
-      osc.start();
-      nodes.push(osc);
-      tremolo(gain, 0.15, 0.03);
-    },
-    nsdr: function () {
-      /* A quiet bed to lie still to: brown noise low-passed, breathing slowly. */
-      var gain = master(0.045);
-      noise(true, { type: 'lowpass', frequency: 500 }, gain);
-      tremolo(gain, 0.05, 0.015);
     }
   };
 

@@ -103,6 +103,26 @@ window.VH = window.VH || {};
     'settings': { href: 'settings.html', label: 'Settings' }
   };
 
+  /* There is no nav entry for the profile - the sidebar already shows who is
+   * open at the bottom of every page, so that strip becomes the way in. */
+  function wireProfileLink() {
+    var name = document.querySelector('[data-vh="name"]');
+    if (!name) return;
+    var strip = name.closest('div');
+    while (strip && strip.parentElement &&
+           !/rounded|border|bg-surface-container/.test(strip.className || '')) {
+      strip = strip.parentElement;
+    }
+    var target = strip || name;
+    if (target.closest('a') || target.dataset.vhProfileLink) return;
+    target.dataset.vhProfileLink = '1';
+    target.classList.add('cursor-pointer');
+    target.setAttribute('title', 'Open your profile');
+    target.addEventListener('click', function () {
+      window.location.href = 'profile.html';
+    });
+  }
+
   function wireNav() {
     var links = document.querySelectorAll('a[data-path], a[data-view]');
     Array.prototype.forEach.call(links, function (link) {
@@ -481,6 +501,7 @@ window.VH = window.VH || {};
 
   VH.shell.boot = async function (page) {
     wireNav();
+    wireProfileLink();
 
     document.addEventListener('click', function (e) {
       var closer = e.target.closest ? e.target.closest('[data-close="1"]') : null;

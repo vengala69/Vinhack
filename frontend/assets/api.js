@@ -80,6 +80,8 @@ window.VH = window.VH || {};
     student: function (id) { return request('GET', S(id)); },
     createStudent: function (body) { return request('POST', '/students', body); },
     updateStudent: function (id, body) { return request('PATCH', S(id), body); },
+    profile: function (id) { return request('GET', S(id) + '/profile'); },
+    clearStudentData: function (id) { return request('DELETE', S(id) + '/data'); },
 
     sleep: function (id, p) { return request('GET', S(id) + '/sleep' + qs(p)); },
     logSleep: function (id, body) { return request('POST', S(id) + '/sleep', body); },

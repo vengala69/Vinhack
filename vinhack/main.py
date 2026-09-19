@@ -15,8 +15,8 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models as m
 from . import wellbeing
-from .db import (DB_PATH, ROOT, connect, get_conn, insert, one, rows, run_script,
-                 schema_exists, update)
+from .db import (DB_PATH, ROOT, add_missing_columns, connect, get_conn, insert, one,
+                 rows, run_script, schema_exists, update)
 
 app = FastAPI(
     title="VinHack API",
@@ -49,6 +49,9 @@ def ensure_schema() -> None:
         run_script(conn, "schema.sql")
         if fresh:
             print(f"created schema in {DB_PATH}")
+        added = add_missing_columns(conn)
+        if added:
+            print("added columns: " + ", ".join(added))
     finally:
         conn.close()
 
@@ -535,7 +538,10 @@ def _mean(values: list[float], places: int = 1) -> Optional[float]:
 @app.get("/api/students/{student_id}/insights", tags=["metrics"])
 def insights(student_id: int, days: int = 14, conn=Depends(get_conn)):
     """The scores, streak and correlations the analytics screens are built on."""
-    require_student(conn, student_id)
+    student = found(one(conn.execute(
+        "SELECT * FROM students WHERE student_id = ?", (student_id,))), "student", student_id)
+    # Score against this student's own target, not a fixed eight hours.
+    goal_minutes = student["sleep_goal_minutes"] or 480
     window = f"-{days} days"
     today, since = conn.execute(
         "SELECT date('now', 'localtime'), date('now', 'localtime', ?)", (window,)).fetchone()
@@ -635,7 +641,7 @@ def insights(student_id: int, days: int = 14, conn=Depends(get_conn)):
     scores = {
         "academic_mastery": mastery.get("pct"),
         "sleep_health": _blend([
-            (_pct(averages.get("avg_sleep_minutes"), 480.0), 0.7),  # 8h is full marks
+            (_pct(averages.get("avg_sleep_minutes"), float(goal_minutes)), 0.7),
             (_pct(averages.get("avg_sleep_quality"), 5.0), 0.3),
         ]),
         "resilience": _blend([
@@ -652,12 +658,16 @@ def insights(student_id: int, days: int = 14, conn=Depends(get_conn)):
     sleep_debt = None
     if averages.get("avg_sleep_minutes") is not None and averages.get("days_logged"):
         sleep_debt = round(
-            (averages["avg_sleep_minutes"] - 480) / 60.0 * averages["days_logged"], 1)
+            (averages["avg_sleep_minutes"] - goal_minutes) / 60.0 * averages["days_logged"], 1)
 
     return {
         "window_days": days,
         "today": today,
         "since": since,
+        "goals": {
+            "sleep_goal_minutes": goal_minutes,
+            "daily_study_goal_hours": student["daily_study_goal_hours"],
+        },
         "averages": averages,
         "mood": mood,
         "focus": focus,
@@ -675,6 +685,57 @@ def insights(student_id: int, days: int = 14, conn=Depends(get_conn)):
         "subject_effort": subject_effort,
         "trend": trend,
     }
+
+
+@app.get("/api/students/{student_id}/profile", tags=["students"])
+def profile(student_id: int, conn=Depends(get_conn)):
+    """The student's record plus how much of each thing they have logged.
+
+    The counts are what make a profile page worth opening: they answer "how
+    much of this have I actually used" in one screen, and they are the figures
+    the delete button is really asking you about.
+    """
+    student = found(one(conn.execute(
+        "SELECT * FROM students WHERE student_id = ?", (student_id,))), "student", student_id)
+
+    counts = {}
+    for table, label in (("sleep_logs", "nights"), ("screen_time", "screen_days"),
+                         ("mood_energy", "check_ins"), ("academic_tasks", "tasks"),
+                         ("calendar_events", "events"), ("study_sessions", "sessions"),
+                         ("assessments", "assessments")):
+        counts[label] = conn.execute(
+            f"SELECT count(*) FROM {table} WHERE student_id = ?", (student_id,)).fetchone()[0]
+
+    totals = one(conn.execute(
+        "SELECT ROUND(SUM(duration_minutes) / 60.0, 1) AS study_hours, "
+        "       MIN(date(start_time)) AS first_session "
+        "FROM study_sessions WHERE student_id = ? AND duration_minutes IS NOT NULL",
+        (student_id,))) or {}
+
+    return {
+        "student": student,
+        "counts": counts,
+        "totals": totals,
+        "open_tasks": conn.execute(
+            "SELECT count(*) FROM v_open_tasks WHERE student_id = ?",
+            (student_id,)).fetchone()[0],
+    }
+
+
+@app.delete("/api/students/{student_id}/data", status_code=204, tags=["students"])
+def clear_student_data(student_id: int, conn=Depends(get_conn)):
+    """Wipe everything this student logged, keeping the student themselves.
+
+    Separate from DELETE /students/{id}: "start again" and "I am not a user of
+    this any more" are different intentions, and only one of them should take
+    the account with it.
+    """
+    require_student(conn, student_id)
+    for table in ("assessments", "study_sessions", "mood_energy", "calendar_events",
+                  "academic_tasks", "screen_time", "sleep_logs", "daily_metrics"):
+        conn.execute(f"DELETE FROM {table} WHERE student_id = ?", (student_id,))
+    conn.commit()
+    refresh(conn)
 
 
 # ---------------------------------------------------------------------

@@ -16,11 +16,20 @@ PRAGMA foreign_keys = ON;
 
 -- 1. students -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS students (
-    student_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name       TEXT    NOT NULL,
-    email      TEXT    NOT NULL UNIQUE,
-    semester   INTEGER CHECK (semester BETWEEN 1 AND 12),
-    created_at TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+    student_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT    NOT NULL,
+    email           TEXT    NOT NULL UNIQUE,
+    semester        INTEGER CHECK (semester BETWEEN 1 AND 12),
+    programme       TEXT,
+    registration_no TEXT,
+    -- Targets the app measures against. Eight hours and four hours are the
+    -- defaults, not the law: a student on night shifts and one with 9am
+    -- lectures should not be scored against the same number.
+    sleep_goal_minutes     INTEGER NOT NULL DEFAULT 480
+                           CHECK (sleep_goal_minutes BETWEEN 240 AND 720),
+    daily_study_goal_hours REAL    NOT NULL DEFAULT 4.0
+                           CHECK (daily_study_goal_hours BETWEEN 0 AND 16),
+    created_at      TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 -- 2. sleep_logs ---------------------------------------------------------

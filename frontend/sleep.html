@@ -132,13 +132,13 @@
 </div>
 <div class="flex items-center gap-space-md">
 <div class="flex items-center gap-space-xs font-label-sm text-label-sm text-on-surface-variant">
-<span class="w-3 h-3 rounded-full bg-primary"></span> 8h or more
+<span class="w-3 h-3 rounded-full bg-primary"></span> At or above target
 </div>
 <div class="flex items-center gap-space-xs font-label-sm text-label-sm text-on-surface-variant">
-<span class="w-3 h-3 rounded-full bg-error"></span> Under 8h
+<span class="w-3 h-3 rounded-full bg-error"></span> Under target
 </div>
 <div class="flex items-center gap-space-xs font-label-sm text-label-sm text-on-surface-variant">
-<span class="w-3 h-1 bg-error rounded-full"></span> 8.0h target
+<span class="w-3 h-1 bg-error rounded-full"></span> <span id="sleep-goal-legend">8.0h</span> target
 </div>
 </div>
 </div>
@@ -148,7 +148,7 @@
 <!-- The 8h goal line. The plot tops out at 10h, so 8h sits 20% down. -->
 <div class="absolute inset-x-0 top-[20%] pointer-events-none flex items-center px-4">
 <div class="w-full border-b border-dashed border-error/50"></div>
-<span class="absolute right-4 -top-3 font-label-sm text-label-sm text-error bg-surface-container px-1.5 py-0.5 rounded">8.0h target</span>
+<span class="absolute right-4 -top-3 font-label-sm text-label-sm text-error bg-surface-container px-1.5 py-0.5 rounded" id="sleep-goal-label">8.0h target</span>
 </div>
 <div class="relative z-10 grid grid-cols-7 h-48 items-end gap-2 sm:gap-6 pt-6" id="sleep-chart"></div>
 </div>
