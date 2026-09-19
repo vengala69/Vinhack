@@ -453,8 +453,24 @@ window.VH = window.VH || {};
   VH.shell.insights = null;
   VH.shell.subjects = [];
 
-  /* Pages call this and get back the two things nearly all of them need.
-   * page === 'login' skips the guard, since that is where you go to sign in. */
+  /* Pages call this and get back the two things nearly all of them need. */
+  /* There is no login screen. With nothing stored, open on whoever is first
+   * in the database - the API has no accounts, so this is only a default pick. */
+  VH.shell.defaultStudentId = async function () {
+    var list;
+    try {
+      list = await VH.api.students();
+    } catch (err) {
+      VH.fail(err, 'Loading your data');
+      return null;
+    }
+    if (!list || !list.length) {
+      VH.toast('No students in the database - seed it with: py db/setup.py --reset --seed', 'error');
+      return null;
+    }
+    return list[0].student_id;
+  };
+
   VH.shell.boot = async function (page) {
     wireNav();
 
@@ -484,12 +500,11 @@ window.VH = window.VH || {};
       });
     });
 
-    if (page === 'login') return null;
-
     var id = VH.session.id();
     if (!id) {
-      window.location.replace('login.html');
-      return null;
+      id = await VH.shell.defaultStudentId();
+      if (!id) return null;
+      VH.session.set(id);
     }
 
     var started = performance.now();
@@ -499,13 +514,24 @@ window.VH = window.VH || {};
       insights = await VH.api.insights(id, 14);
     } catch (err) {
       if (err instanceof VH.ApiError && err.status === 404) {
-        /* The stored id points at a student who has since been deleted. */
+        /* The stored id points at a student who has since been deleted:
+         * fall back to whoever is first in the database. */
         VH.session.clear();
-        window.location.replace('login.html');
+        var fallback = await VH.shell.defaultStudentId();
+        if (!fallback || fallback === id) return null;
+        VH.session.set(fallback);
+        id = fallback;
+        try {
+          student = await VH.api.student(id);
+          insights = await VH.api.insights(id, 14);
+        } catch (retryErr) {
+          VH.fail(retryErr, 'Loading your data');
+          return null;
+        }
+      } else {
+        VH.fail(err, 'Loading your data');
         return null;
       }
-      VH.fail(err, 'Loading your data');
-      return null;
     }
     var latency = performance.now() - started;
 

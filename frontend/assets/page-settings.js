@@ -205,12 +205,12 @@
     var clear = $('clear-prefs');
     if (clear) {
       clear.addEventListener('click', function () {
-        if (!window.confirm('Reset interface preferences and sign this browser out?')) return;
+        if (!window.confirm('Reset interface preferences and reopen as the first student?')) return;
         try {
           window.localStorage.removeItem(PREFS_KEY);
         } catch (err) { /* private mode */ }
         VH.session.clear();
-        window.location.href = 'login.html';
+        window.location.reload();
       });
     }
   }
@@ -290,7 +290,7 @@
     if (confirm) {
       confirm.addEventListener('click', function () {
         VH.session.clear();
-        window.location.href = 'login.html';
+        window.location.reload();
       });
     }
   }
